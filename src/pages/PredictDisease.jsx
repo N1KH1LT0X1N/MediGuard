@@ -9,6 +9,7 @@ const PredictDisease = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentUploadType, setCurrentUploadType] = useState(null);
   const [isManualEntryOpen, setIsManualEntryOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('image'); // 'image', 'pdf', 'csv', 'manual'
   const [manualData, setManualData] = useState({
     glucose: '',
     cholesterol: '',
@@ -181,16 +182,16 @@ const PredictDisease = () => {
   };
 
   const FileUploadCard = ({ type, title, acceptedFormats }) => (
-    <div className="flex-1">
-      <div className="bg-white rounded-xl shadow-lg border-2 border-black overflow-hidden h-full">
+    <div className="w-full">
+      <div className="bg-white rounded-xl shadow-lg border-2 border-black overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-gray-50 to-white px-6 py-4 border-b-2 border-black">
           <h3 className="text-lg font-semibold text-gray-900 tracking-tight">{title}</h3>
         </div>
 
         {/* Upload Area */}
-        <div className="p-6">
-          <div className="border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 border-gray-300 hover:border-black hover:bg-gray-50">
+        <div className="p-8">
+          <div className="border-2 border-dashed rounded-lg p-16 text-center transition-all duration-200 border-gray-300 hover:border-black hover:bg-gray-50">
             {uploadedFiles[type] ? (
               <div className="space-y-3">
                 <div className="text-black text-5xl">✓</div>
@@ -262,87 +263,129 @@ const PredictDisease = () => {
   return (
     <div className="space-y-6 w-full font-sans">
       <div className="bg-white rounded-lg shadow p-6 w-full">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">Predict Disease</h1>
-        <p className="text-gray-600 mb-8 font-normal">Upload medical documents to analyze and predict potential diseases</p>
-        
-        {/* Upload Cards - Side by Side */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
-          <FileUploadCard
-            type="png"
-            title="Medical Images"
-            acceptedFormats=".png,.jpg,.jpeg"
-          />
-          <FileUploadCard
-            type="pdf"
-            title="PDF Reports"
-            acceptedFormats=".pdf"
-          />
-          <FileUploadCard
-            type="csv"
-            title="Data Sheets"
-            acceptedFormats=".csv,.xlsx,.xls"
-          />
+        <div className="text-center mb-8">
+          <h1 className="text-5xl font-bold text-gray-900 mb-4 tracking-tight">Predict Disease</h1>
+          <p className="text-gray-600 font-normal text-lg">Choose your preferred method to analyze and predict potential diseases</p>
         </div>
-      </div>
-
-      {/* Manual Data Entry Section */}
-      <div className="bg-white rounded-lg shadow-lg p-6 w-full border-2 border-black">
-        <button
-          onClick={() => setIsManualEntryOpen(!isManualEntryOpen)}
-          className="w-full flex items-center justify-between text-left"
-        >
-          <div>
-            <h2 className="text-2xl font-semibold text-gray-900 tracking-tight">Analyze by Entering Data Manually</h2>
-            <p className="text-sm text-gray-600 mt-1 font-normal">Enter medical parameters to get disease prediction</p>
-          </div>
-          <svg
-            className={`w-8 h-8 text-black transition-transform duration-300 ${
-              isManualEntryOpen ? 'rotate-180' : ''
+        
+        {/* Category Selection Buttons */}
+        <div className="flex gap-4 mb-8 flex-wrap justify-center">
+          <button
+            onClick={() => setSelectedCategory('image')}
+            className={`px-6 py-3 rounded-lg font-medium transition-all duration-300 ${
+              selectedCategory === 'image'
+                ? 'bg-gray-900 text-white shadow-lg'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+            Analyze using JPG/PNG
+          </button>
+          <button
+            onClick={() => setSelectedCategory('pdf')}
+            className={`px-6 py-3 rounded-lg font-medium transition-all duration-300 ${
+              selectedCategory === 'pdf'
+                ? 'bg-gray-900 text-white shadow-lg'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Analyze using PDF
+          </button>
+          <button
+            onClick={() => setSelectedCategory('csv')}
+            className={`px-6 py-3 rounded-lg font-medium transition-all duration-300 ${
+              selectedCategory === 'csv'
+                ? 'bg-gray-900 text-white shadow-lg'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Analyze using CSV/Excel
+          </button>
+          <button
+            onClick={() => setSelectedCategory('manual')}
+            className={`px-6 py-3 rounded-lg font-medium transition-all duration-300 ${
+              selectedCategory === 'manual'
+                ? 'bg-gray-900 text-white shadow-lg'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Manually Enter Data
+          </button>
+        </div>
 
-        {isManualEntryOpen && (
-          <div className="mt-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {medicalFields.map((field) => (
-                <div key={field.key} className="flex flex-col">
-                  <label className="text-sm font-medium text-gray-900 mb-2">
-                    {field.label}
-                    <span className="text-red-600 ml-1">*</span>
-                    {field.unit && <span className="text-gray-500 font-normal ml-1">({field.unit})</span>}
-                  </label>
-                  <input
-                    type={field.key === 'disease' ? 'text' : 'number'}
-                    step={field.key === 'disease' ? undefined : '0.01'}
-                    value={manualData[field.key]}
-                    onChange={(e) => handleManualDataChange(field.key, e.target.value)}
-                    placeholder={`Enter ${field.label.toLowerCase()}`}
-                    className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#7FFF00] focus:outline-none transition-colors duration-200"
-                    required
-                  />
-                </div>
-              ))}
-            </div>
+        {/* Conditional Rendering Based on Selected Category */}
+        {selectedCategory === 'image' && (
+          <div className="animate-fadeIn">
+            <FileUploadCard
+              type="png"
+              title="Medical Images"
+              acceptedFormats=".png,.jpg,.jpeg"
+            />
+          </div>
+        )}
 
-            {/* Analyze Button */}
-            <div className="mt-8 flex justify-center">
-              <button
-                onClick={handleManualAnalyze}
-                disabled={!isAllFieldsFilled() || isAnalyzing}
-                className={`px-12 py-4 rounded-lg font-bold text-lg transition-all duration-200 ${
-                  isAllFieldsFilled() && !isAnalyzing
-                    ? 'bg-[#7FFF00] hover:bg-[#6ee000] text-black cursor-pointer'
-                    : 'bg-gray-400 text-gray-600 cursor-not-allowed'
-                }`}
-              >
-                {isAnalyzing ? 'Analyzing...' : 'Analyze Data'}
-              </button>
+        {selectedCategory === 'pdf' && (
+          <div className="animate-fadeIn">
+            <FileUploadCard
+              type="pdf"
+              title="PDF Reports"
+              acceptedFormats=".pdf"
+            />
+          </div>
+        )}
+
+        {selectedCategory === 'csv' && (
+          <div className="animate-fadeIn">
+            <FileUploadCard
+              type="csv"
+              title="Data Sheets"
+              acceptedFormats=".csv,.xlsx,.xls"
+            />
+          </div>
+        )}
+
+        {selectedCategory === 'manual' && (
+          <div className="animate-fadeIn">
+            <div className="bg-white rounded-lg border-2 border-black p-6">
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-gray-900 tracking-tight mb-2">Enter Medical Parameters</h2>
+                <p className="text-sm text-gray-600 font-normal">Fill in all the required medical parameters to get disease prediction</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {medicalFields.map((field) => (
+                  <div key={field.key} className="flex flex-col">
+                    <label className="text-sm font-medium text-gray-900 mb-2">
+                      {field.label}
+                      <span className="text-red-600 ml-1">*</span>
+                      {field.unit && <span className="text-gray-500 font-normal ml-1">({field.unit})</span>}
+                    </label>
+                    <input
+                      type={field.key === 'disease' ? 'text' : 'number'}
+                      step={field.key === 'disease' ? undefined : '0.01'}
+                      value={manualData[field.key]}
+                      onChange={(e) => handleManualDataChange(field.key, e.target.value)}
+                      placeholder={`Enter ${field.label.toLowerCase()}`}
+                      className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#7FFF00] focus:outline-none transition-colors duration-200"
+                      required
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Analyze Button */}
+              <div className="mt-8 flex justify-center">
+                <button
+                  onClick={handleManualAnalyze}
+                  disabled={!isAllFieldsFilled() || isAnalyzing}
+                  className={`px-12 py-4 rounded-lg font-bold text-lg transition-all duration-200 ${
+                    isAllFieldsFilled() && !isAnalyzing
+                      ? 'bg-[#7FFF00] hover:bg-[#6ee000] text-black cursor-pointer'
+                      : 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                  }`}
+                >
+                  {isAnalyzing ? 'Analyzing...' : 'Analyze Data'}
+                </button>
+              </div>
             </div>
           </div>
         )}

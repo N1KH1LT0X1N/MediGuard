@@ -266,6 +266,22 @@ body::-webkit-scrollbar {
   }
 }
 
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.8s ease-out forwards;
+  opacity: 0;
+}
+
 /* Ensure nav CTA styling applies globally (not scoped under .hero-container) */
 .nav-cta {
   background-color: #9CFB4B;
