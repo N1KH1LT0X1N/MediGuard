@@ -264,7 +264,11 @@ const PredictDisease = () => {
     <div className="space-y-6 w-full font-sans">
       <div className="bg-white rounded-lg shadow p-6 w-full">
         <div className="text-center mb-8">
-          <h1 className="text-5xl font-bold text-gray-900 mb-4 tracking-tight">Predict Disease</h1>
+          <h1 className="text-5xl font-bold text-gray-900 mb-4 tracking-tight">
+            <span className="text-gray-900">Predict </span>
+            <span style={{ color: '#7FFF00' }}>Intelligent</span>
+            <span className="text-gray-900"> Diagnosis</span>
+          </h1>
           <p className="text-gray-600 font-normal text-lg">Choose your preferred method to analyze and predict potential diseases</p>
         </div>
         
