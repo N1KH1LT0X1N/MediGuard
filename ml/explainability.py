@@ -177,13 +177,13 @@ class MediGuardExplainer:
         
         return np.array(predictions)
     
-    def generate_interactive_plot(self, patient_data: Dict[str, float], output_dir: str = '.') -> str:
+    def generate_interactive_plot(self, patient_data: Dict[str, float], output_dir: str = 'explanations') -> str:
         """
         Generate interactive risk indicator plot using LIME explanations.
         
         Args:
             patient_data: Dictionary of raw feature values (24 features)
-            output_dir: Directory to save HTML file (default: current directory)
+            output_dir: Directory to save HTML file (default: explanations folder)
         
         Returns:
             Absolute path to generated HTML file
@@ -409,7 +409,12 @@ class MediGuardExplainer:
         # Generate timestamp-based filename
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f'explanation_{timestamp}.html'
-        output_path = Path(output_dir) / filename
+        
+        # Ensure output directory exists
+        output_dir_path = Path(output_dir)
+        output_dir_path.mkdir(parents=True, exist_ok=True)
+        
+        output_path = output_dir_path / filename
         output_path = output_path.resolve()
         
         # Save HTML file

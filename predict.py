@@ -489,7 +489,7 @@ Required features (in order):
             try:
                 html_path = explainer.generate_interactive_plot(
                     patient_data=feature_dict,
-                    output_dir=str(script_dir)
+                    output_dir=str(script_dir / 'explanations')
                 )
                 # In JSON mode, print to stderr or add to result
                 import sys
@@ -523,7 +523,7 @@ Required features (in order):
             try:
                 html_path = explainer.generate_interactive_plot(
                     patient_data=feature_dict,
-                    output_dir=str(script_dir)
+                    output_dir=str(script_dir / 'explanations')
                 )
                 print(f"\n✨ Explanation graph saved to {html_path}")
                 print("   Opening in browser...\n")
