@@ -37,44 +37,85 @@ const PredictDisease = () => {
     cReactiveProtein: ''
   });
 
+  const [validationErrors, setValidationErrors] = useState({});
+
   const medicalFields = [
-    { key: 'glucose', label: 'Glucose', unit: 'mg/dL' },
-    { key: 'cholesterol', label: 'Cholesterol', unit: 'mg/dL' },
-    { key: 'hemoglobin', label: 'Hemoglobin', unit: 'g/dL' },
-    { key: 'platelets', label: 'Platelets', unit: 'cells/μL' },
-    { key: 'whiteBloodCells', label: 'White Blood Cells', unit: 'cells/μL' },
-    { key: 'redBloodCells', label: 'Red Blood Cells', unit: 'million cells/μL' },
-    { key: 'hematocrit', label: 'Hematocrit', unit: '%' },
-    { key: 'meanCorpuscularVolume', label: 'Mean Corpuscular Volume', unit: 'fL' },
-    { key: 'meanCorpuscularHemoglobin', label: 'Mean Corpuscular Hemoglobin', unit: 'pg' },
-    { key: 'meanCorpuscularHemoglobinConcentration', label: 'Mean Corpuscular Hemoglobin Concentration', unit: 'g/dL' },
-    { key: 'insulin', label: 'Insulin', unit: 'μU/mL' },
-    { key: 'bmi', label: 'BMI', unit: 'kg/m²' },
-    { key: 'systolicBloodPressure', label: 'Systolic Blood Pressure', unit: 'mmHg' },
-    { key: 'diastolicBloodPressure', label: 'Diastolic Blood Pressure', unit: 'mmHg' },
-    { key: 'triglycerides', label: 'Triglycerides', unit: 'mg/dL' },
-    { key: 'hba1c', label: 'HbA1c', unit: '%' },
-    { key: 'ldlCholesterol', label: 'LDL Cholesterol', unit: 'mg/dL' },
-    { key: 'hdlCholesterol', label: 'HDL Cholesterol', unit: 'mg/dL' },
-    { key: 'alt', label: 'ALT', unit: 'U/L' },
-    { key: 'ast', label: 'AST', unit: 'U/L' },
-    { key: 'heartRate', label: 'Heart Rate', unit: 'bpm' },
-    { key: 'creatinine', label: 'Creatinine', unit: 'mg/dL' },
-    { key: 'troponin', label: 'Troponin', unit: 'ng/mL' },
-    { key: 'cReactiveProtein', label: 'C-reactive Protein', unit: 'mg/L' }
+    { key: 'glucose', label: 'Glucose', unit: 'mg/dL', min: 39.09, max: 231.86 },
+    { key: 'cholesterol', label: 'Cholesterol', unit: 'mg/dL', min: 52.73, max: 344.59 },
+    { key: 'hemoglobin', label: 'Hemoglobin', unit: 'g/dL', min: 10.58, max: 19.45 },
+    { key: 'platelets', label: 'Platelets', unit: 'cells/μL', min: 84000, max: 516000 },
+    { key: 'whiteBloodCells', label: 'White Blood Cells', unit: 'cells/μL', min: 2350, max: 12651 },
+    { key: 'redBloodCells', label: 'Red Blood Cells', unit: 'million cells/μL', min: 3.56, max: 6.44 },
+    { key: 'hematocrit', label: 'Hematocrit', unit: '%', min: 32.23, max: 55.57 },
+    { key: 'meanCorpuscularVolume', label: 'Mean Corpuscular Volume', unit: 'fL', min: 75.12, max: 104.49 },
+    { key: 'meanCorpuscularHemoglobin', label: 'Mean Corpuscular Hemoglobin', unit: 'pg', min: 25.57, max: 34.42 },
+    { key: 'meanCorpuscularHemoglobinConcentration', label: 'Mean Corpuscular Hemoglobin Concentration', unit: 'g/dL', min: 31.12, max: 36.88 },
+    { key: 'insulin', label: 'Insulin', unit: 'μIU/mL', min: -3.47, max: 30.49 },
+    { key: 'bmi', label: 'BMI', unit: 'kg/m²', min: 9.40, max: 46.04 },
+    { key: 'systolicBloodPressure', label: 'Systolic Blood Pressure', unit: 'mmHg', min: 69.85, max: 201.77 },
+    { key: 'diastolicBloodPressure', label: 'Diastolic Blood Pressure', unit: 'mmHg', min: 51.09, max: 109.41 },
+    { key: 'triglycerides', label: 'Triglycerides', unit: 'mg/dL', min: -55.76, max: 605.71 },
+    { key: 'hba1c', label: 'HbA1c', unit: '%', min: 2.10, max: 13.79 },
+    { key: 'ldlCholesterol', label: 'LDL Cholesterol', unit: 'mg/dL', min: 14.43, max: 236.67 },
+    { key: 'hdlCholesterol', label: 'HDL Cholesterol', unit: 'mg/dL', min: 18.13, max: 91.16 },
+    { key: 'alt', label: 'ALT', unit: 'U/L', min: -4.94, max: 68.35 },
+    { key: 'ast', label: 'AST', unit: 'U/L', min: 2.73, max: 47.17 },
+    { key: 'heartRate', label: 'Heart Rate', unit: 'bpm', min: 38.12, max: 111.89 },
+    { key: 'creatinine', label: 'Creatinine', unit: 'mg/dL', min: 0.43, max: 1.47 },
+    { key: 'troponin', label: 'Troponin', unit: 'ng/mL', min: 0.00, max: 0.05 },
+    { key: 'cReactiveProtein', label: 'C-reactive Protein', unit: 'mg/L', min: -1.12, max: 12.33 }
   ];
 
   const isAllFieldsFilled = () => {
     return Object.values(manualData).every(value => value.trim() !== '');
   };
 
+  const isAllFieldsValid = () => {
+    return isAllFieldsFilled() && Object.keys(validationErrors).length === 0;
+  };
+
+  const validateField = (key, value, field) => {
+    if (value === '') {
+      return null; // Don't validate empty fields
+    }
+
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) {
+      return 'Please enter a valid number';
+    }
+
+    if (numValue < field.min || numValue > field.max) {
+      return `Value must be between ${field.min} and ${field.max}`;
+    }
+
+    return null;
+  };
+
   const handleManualDataChange = (key, value) => {
     setManualData({ ...manualData, [key]: value });
+
+    // Find the field configuration
+    const field = medicalFields.find(f => f.key === key);
+    if (!field) return;
+
+    // Validate the field
+    const error = validateField(key, value, field);
+    
+    // Update validation errors
+    setValidationErrors(prevErrors => {
+      const newErrors = { ...prevErrors };
+      if (error) {
+        newErrors[key] = error;
+      } else {
+        delete newErrors[key];
+      }
+      return newErrors;
+    });
   };
 
   const handleManualAnalyze = () => {
-    if (!isAllFieldsFilled()) {
-      alert('Please fill in all fields before analyzing');
+    if (!isAllFieldsValid()) {
+      alert('Please fill in all fields with valid values before analyzing');
       return;
     }
 
@@ -364,14 +405,23 @@ const PredictDisease = () => {
                       {field.unit && <span className="text-gray-500 font-normal ml-1">({field.unit})</span>}
                     </label>
                     <input
-                      type={field.key === 'disease' ? 'text' : 'number'}
-                      step={field.key === 'disease' ? undefined : '0.01'}
+                      type="number"
+                      step="0.01"
                       value={manualData[field.key]}
                       onChange={(e) => handleManualDataChange(field.key, e.target.value)}
-                      placeholder={`Enter ${field.label.toLowerCase()}`}
-                      className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#7FFF00] focus:outline-none transition-colors duration-200"
+                      placeholder={`Enter a value between ${field.min} to ${field.max}`}
+                      className={`px-4 py-2 border-2 rounded-lg focus:outline-none transition-colors duration-200 ${
+                        validationErrors[field.key]
+                          ? 'border-red-500 focus:border-red-600'
+                          : 'border-gray-300 focus:border-[#7FFF00]'
+                      }`}
                       required
                     />
+                    {validationErrors[field.key] && (
+                      <span className="text-red-600 text-xs mt-1 font-medium">
+                        {validationErrors[field.key]}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -380,9 +430,9 @@ const PredictDisease = () => {
               <div className="mt-8 flex justify-center">
                 <button
                   onClick={handleManualAnalyze}
-                  disabled={!isAllFieldsFilled() || isAnalyzing}
+                  disabled={!isAllFieldsValid() || isAnalyzing}
                   className={`px-12 py-4 rounded-lg font-bold text-lg transition-all duration-200 ${
-                    isAllFieldsFilled() && !isAnalyzing
+                    isAllFieldsValid() && !isAnalyzing
                       ? 'bg-[#7FFF00] hover:bg-[#6ee000] text-black cursor-pointer'
                       : 'bg-gray-400 text-gray-600 cursor-not-allowed'
                   }`}
