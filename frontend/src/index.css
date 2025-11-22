@@ -1,0 +1,301 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@200;300;400;600;700;800&display=swap');
+@import "tailwindcss";
+
+@font-face {
+  font-family: "ProximaNova, sans-serif";
+  src: url("/fonts/ProximaNova-Regular.otf");
+}
+
+@theme {
+  --color-black: #222123;
+  --color-main-bg: #232224;
+  --color-white: #ffffff;
+  --color-dark-brown: #523122;
+  --color-mid-brown: #a26833;
+  --color-light-brown: #e3a458;
+  --color-red-brown: #7f3b2d;
+  --color-yellow-brown: #a26833;
+  --color-milk-yellow: #e3d3bc;
+  --color-red: #a02128;
+  --color-milk: #faeade;
+  --font-sans: "Poppins", sans-serif;
+  --font-paragraph: "Poppins", sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  background-color: #ffffff;
+  color: #523122;
+  font-family: "Poppins", sans-serif;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE 10+ */
+}
+
+body::-webkit-scrollbar {
+  display: none; /* Chrome, Safari */
+}
+
+@layer utilities {
+  .flex-center {
+    @apply flex justify-center items-center;
+  }
+  .col-center {
+    @apply flex flex-col justify-center items-center;
+  }
+  .abs-center {
+    @apply absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2;
+  }
+  .general-title {
+    @apply 2xl:text-[8.5rem] md:text-8xl text-5xl font-bold uppercase leading-[9vw] tracking-[-.35vw];
+  }
+}
+
+@layer components {
+  .paragraph-line {
+    @apply text-nowrap overflow-hidden;
+  }
+
+  .hero-container {
+    @apply relative bg-white w-screen h-dvh overflow-hidden;
+
+    .hero-content {
+      @apply relative z-10 w-full h-full flex flex-col 2xl:justify-center items-center translate-y-10 2xl:pt-0 md:pt-32 pt-24;
+
+      .hero-title {
+        color: #0b1220; /* dark navy */
+        font-weight: 300;
+        font-size: clamp(2.6rem, 6.5vw, 6.8rem);
+        line-height: 1.05; /* more space between lines */
+        letter-spacing: -0.005em; /* reduce cramped letters */
+        text-transform: none;
+        margin-bottom: 0.5rem;
+      }
+      /* Brand color (updated to neon green per request). Change hex if you want a different green */
+      .brand-blue-big {
+        color: #9CFB4B; /* neon green - change if you prefer a different hex */
+        font-weight: 600;
+        font-size: clamp(3rem, 8vw, 7rem);
+        line-height: 0.9;
+        display: inline-block;
+      }
+
+      .by-line {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+      }
+
+      .by-text {
+        color: #0b1220;
+        font-weight: 400;
+        font-size: clamp(1.6rem, 3vw, 2.6rem); /* restore 'by' to a larger size */
+        line-height: 1;
+      }
+
+      /* Nav CTA green style to match brand */
+      .nav-cta {
+        background-color: #9CFB4B; /* match brand green */
+        color: var(--color-dark-brown); /* use site dark brown for label */
+        padding: 0.6rem 1rem;
+        border-radius: 999px;
+        font-size: 1rem;
+        font-weight: 600;
+        box-shadow: 0 8px 18px rgba(156,251,75,0.18);
+        border: 1px solid rgba(0,0,0,0.06);
+        cursor: pointer;
+      }
+
+      .nav-cta:hover {
+        transform: translateY(-1px);
+        filter: brightness(0.97);
+      }
+
+      .hero-subcopy {
+        color: #26303b;
+        font-weight: 400;
+        font-size: 1.05rem;
+        line-height: 1.5;
+      }
+
+      .cta-blue-pill {
+        background: linear-gradient(180deg,#0b2bd6,#00198f);
+        color: #fff;
+        padding: 1.2rem 3.2rem;
+        border-radius: 999px;
+        font-size: 1.25rem;
+        font-weight: 500;
+        box-shadow: 0 18px 30px rgba(11,43,214,0.18);
+        border: none;
+        cursor: pointer;
+      }
+      .brand-blue {
+        color: #0ea5ff;
+      }
+
+      .brand-dark {
+        color: var(--color-dark-brown);
+      }
+
+      .hero-text-scroll {
+        @apply rotate-[-3deg] mb-8;
+
+        h1 {
+          @apply uppercase 2xl:text-[8.5rem] md:text-[6.5rem] text-[3.3rem] font-bold text-[#222] leading-[9vw] tracking-[-.35vw] 2xl:px-[1.2vw] px-3 2xl:pb-[1vw] pb-5 2xl:py-0 py-3;
+        }
+      }
+
+      .hero-subtitle-simple {
+        @apply text-[#222] uppercase md:text-2xl text-xl font-semibold mb-4;
+      }
+
+      h2 {
+        @apply font-paragraph text-dark-brown text-center md:max-w-lg max-w-sm px-5 md:text-lg leading-[115%] mt-3;
+      }
+
+      .hero-button {
+        @apply md:mt-16 mt-10 text-dark-brown bg-light-brown uppercase font-bold text-lg rounded-full md:p-5 p-3 md:px-16 px-10;
+      }
+    }
+  }
+
+  .message-content {
+    /* Neon-green background for this section only; keep other sections untouched */
+    background-color: #9CFB4B; /* neon green */
+    color: #000; /* default text black */
+    min-height: var(--dvh, 100vh);
+    @apply overflow-hidden flex justify-center items-center relative z-20;
+
+    .msg-wrapper {
+      @apply 2xl:text-[8.5rem] md:text-8xl text-5xl font-bold uppercase leading-[9vw] tracking-[-.35vw] flex flex-col justify-center items-center md:gap-24 gap-14;
+
+      h1:first-of-type {
+        @apply 2xl:max-w-4xl md:max-w-2xl max-w-xs text-center text-black;
+      }
+
+      h1:last-of-type {
+        @apply 2xl:max-w-7xl md:max-w-4xl max-w-xs text-center text-black;
+      }
+    }
+
+    p {
+      @apply text-center font-paragraph;
+    }
+
+    h1,
+    h2 {
+      @apply leading-none;
+    }
+
+    .msg-text-scroll {
+      @apply rotate-[3deg] 2xl:translate-y-5 -translate-y-5 absolute z-10;
+      /* make the tape area visually white with dark label */
+      background: transparent;
+      border: none;
+    }
+
+    /* The inner tape wrapper (originally using utility classes) should be white */
+    .msg-text-scroll > div {
+      background-color: #ffffff !important;
+      border: 4px solid rgba(255,255,255,0.95) !important;
+      display: inline-block;
+      padding: 0.6rem 1rem;
+      transform: rotate(-6deg);
+    }
+
+    .msg-text-scroll h2 {
+      color: #000 !important; /* black label on white tape */
+      font-weight: 700;
+    }
+
+    /* Force all text in this section to black so GSAP color tweens to cream won't hide it
+       We use !important scoped to this section only so other sections aren't affected. */
+    .msg-wrapper,
+    .msg-wrapper * {
+      color: #000 !important;
+    }
+  }
+
+  /* Flavor section styles removed */
+
+  /* Nutrition section styles removed */
+
+  /* Benefit section styles removed */
+
+  /* Testimonials section styles removed */
+
+  .footer-section {
+    @apply 2xl:min-h-dvh overflow-hidden relative bg-[#222123];
+
+    .social-btn {
+      @apply border border-[#faeade33] md:size-[5vw] size-14 md:p-0 p-3 flex justify-center items-center rounded-full hover:bg-[#ffffff1a] transition-colors cursor-pointer;
+    }
+
+    input {
+      @apply 2xl:text-4xl text-3xl placeholder:font-bold placeholder:tracking-tighter;
+    }
+
+    .copyright-box {
+      @apply 2xl:absolute w-full md:px-10 px-5 py-7 bottom-0 text-milk opacity-50 md:text-lg font-paragraph flex gap-7 md:flex-row flex-col-reverse md:justify-between justify-center items-center;
+
+      p {
+        @apply text-center;
+      }
+    }
+  }
+}
+
+.nutrition-section {
+  background-color: #faeade00;
+  background-image: radial-gradient(circle, #f3ece2, #dcccb0);
+}
+
+.spin-circle {
+  animation: spin 20s linear infinite;
+}
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.8s ease-out forwards;
+  opacity: 0;
+}
+
+/* Ensure nav CTA styling applies globally (not scoped under .hero-container) */
+.nav-cta {
+  background-color: #9CFB4B;
+  color: var(--color-dark-brown);
+  padding: 0.6rem 1rem;
+  border-radius: 999px;
+  font-size: 1rem;
+  font-weight: 600;
+  box-shadow: 0 8px 18px rgba(156,251,75,0.18);
+  border: 1px solid rgba(0,0,0,0.06);
+  cursor: pointer;
+}
+
+.nav-cta:hover {
+  transform: translateY(-1px);
+  filter: brightness(0.97);
+}
