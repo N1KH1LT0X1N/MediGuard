@@ -34,6 +34,9 @@ body {
   scroll-behavior: smooth;
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE 10+ */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 body::-webkit-scrollbar {
@@ -298,4 +301,18 @@ body::-webkit-scrollbar {
 .nav-cta:hover {
   transform: translateY(-1px);
   filter: brightness(0.97);
+}
+
+/* Hide default Botpress widget button */
+[data-bp-widget],
+.bp-widget-container,
+[id*="botpress"],
+[id*="bp-"],
+[class*="bp-widget"],
+[class*="botpress-widget"],
+iframe[src*="botpress"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
