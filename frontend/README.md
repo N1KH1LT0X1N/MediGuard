@@ -380,9 +380,9 @@ Currently using React's built-in state management:
 
 For complete project documentation, see:
 
-- **`../PROJECT_CONTEXT.md`**: Full project context and architecture
-- **`../MODEL_TRAINING_LOGIC.md`**: ML model training documentation
-- **`../SCALING_LOGIC_EXPLAINED.md`**: Scaling bridge documentation
+- **`../docs/PROJECT_CONTEXT.md`**: Full project context and architecture
+- **`../docs/MODEL_TRAINING_LOGIC.md`**: ML model training documentation
+- **`../docs/SCALING_LOGIC_EXPLAINED.md`**: Scaling bridge documentation
 - **`../ml/scaling_layer/README.md`**: Scaling bridge usage guide
 
 ## 🔮 Next Steps

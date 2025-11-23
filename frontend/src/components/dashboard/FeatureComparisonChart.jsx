@@ -1,6 +1,6 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 
-const FeatureComparisonChart = ({ predictions, selectedFeatures = [] }) => {
+const FeatureComparisonChart = ({ predictions, selectedFeatures = [], showPatientNames = false }) => {
   // Default features to show if none selected
   const defaultFeatures = [
     'Glucose',
@@ -101,6 +101,16 @@ const FeatureComparisonChart = ({ predictions, selectedFeatures = [] }) => {
               if (name === 'minimum') return [value, 'Minimum'];
               if (name === 'maximum') return [value, 'Maximum'];
               return [value, name];
+            }}
+            labelFormatter={(label, payload) => {
+              if (showPatientNames && payload && payload[0] && payload[0].payload) {
+                // For bar charts, we show patient info if available
+                const patientInfo = payload[0].payload.patientInfo;
+                if (patientInfo) {
+                  return `${label} - ${patientInfo}`;
+                }
+              }
+              return label;
             }}
           />
           <Legend />

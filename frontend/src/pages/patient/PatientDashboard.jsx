@@ -11,9 +11,9 @@ const PatientDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Get user ID from localStorage
+  // Get user ID from sessionStorage
   const getUserId = () => {
-    return localStorage.getItem('mediguard_user_id') || 'default_user';
+    return sessionStorage.getItem('mediguard_user_id') || null;
   };
 
   useEffect(() => {
@@ -21,6 +21,12 @@ const PatientDashboard = () => {
       try {
         setLoading(true);
         const userId = getUserId();
+        
+        if (!userId) {
+          setError('No user ID found. Please make a prediction first.');
+          setLoading(false);
+          return;
+        }
         
         // Fetch dashboard stats and recent predictions in parallel
         const [statsData, predictionsData] = await Promise.all([

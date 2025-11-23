@@ -61,9 +61,9 @@ class ExplainabilityService:
             return
         
         try:
-            model_path = PROJECT_ROOT / "disease_prediction_model.pkl"
-            encoder_path = PROJECT_ROOT / "label_encoder.pkl"
-            training_data_path = PROJECT_ROOT / "cleaned_test.csv"
+            model_path = PROJECT_ROOT / "models" / "disease_prediction_model.pkl"
+            encoder_path = PROJECT_ROOT / "models" / "label_encoder.pkl"
+            training_data_path = PROJECT_ROOT / "test_data" / "cleaned_test.csv"
             
             # Initialize scaling bridge
             sys.path.insert(0, str(PROJECT_ROOT / "ml" / "scaling_layer"))
@@ -74,14 +74,25 @@ class ExplainabilityService:
             else:
                 scaling_bridge = create_bridge_from_inferred_ranges()
             
+            # Check if files exist
+            if not model_path.exists():
+                raise FileNotFoundError(f"Model file not found: {model_path}")
+            if not encoder_path.exists():
+                raise FileNotFoundError(f"Encoder file not found: {encoder_path}")
+            if not training_data_path.exists():
+                raise FileNotFoundError(f"Training data file not found: {training_data_path}")
+            
             self.explainer = MediGuardExplainer(
                 model_path=str(model_path),
                 encoder_path=str(encoder_path),
                 training_data_path=str(training_data_path),
                 scaling_bridge=scaling_bridge
             )
+            print(f"✓ Explainability service: MediGuardExplainer initialized successfully")
         except Exception as e:
-            print(f"Warning: Could not initialize explainability service: {e}")
+            import traceback
+            print(f"⚠️  Warning: Could not initialize explainability service: {e}")
+            print(f"   Traceback: {traceback.format_exc()}")
             self.explainer = None
     
     def generate_explanation(self, features: Dict[str, float]) -> Tuple[Dict[str, float], str]:
@@ -98,6 +109,7 @@ class ExplainabilityService:
         """
         if not self.explainer:
             # Return empty results if explainability not available
+            print("⚠️  Explainability service: explainer not initialized, returning empty results")
             return {}, ""
         
         try:
@@ -120,7 +132,9 @@ class ExplainabilityService:
             return explainability_json, explainability_html
         
         except Exception as e:
-            print(f"Error generating explanation: {e}")
+            import traceback
+            print(f"❌ Error generating explanation: {e}")
+            print(f"   Traceback: {traceback.format_exc()}")
             # Return empty results on error
             return {}, ""
     

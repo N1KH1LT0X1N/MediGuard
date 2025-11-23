@@ -1,4 +1,4 @@
-const RecentPredictionsList = ({ predictions, onPredictionClick }) => {
+const RecentPredictionsList = ({ predictions, onPredictionClick, showPatientId = false }) => {
   if (!predictions || predictions.length === 0) {
     return (
       <div className="bg-white rounded-xl p-6 border-2 border-[#222123] shadow-lg animate-fadeIn">
@@ -68,6 +68,11 @@ const RecentPredictionsList = ({ predictions, onPredictionClick }) => {
                   <h4 className={`text-lg font-bold ${getDiseaseColor(disease)}`}>
                     {disease}
                   </h4>
+                  {showPatientId && prediction.user_id && (
+                    <p className="text-xs font-semibold text-gray-700 mt-1">
+                      Patient: {prediction.user_id.length > 25 ? `${prediction.user_id.substring(0, 25)}...` : prediction.user_id}
+                    </p>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">{formatDate(prediction.timestamp)}</p>
                 </div>
                 <div className="flex flex-col items-end space-y-1">

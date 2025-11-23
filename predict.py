@@ -337,14 +337,14 @@ Required features (in order):
     parser.add_argument(
         '--model',
         type=str,
-        default='disease_prediction_model.pkl',
-        help='Path to model file (default: disease_prediction_model.pkl)'
+        default='models/disease_prediction_model.pkl',
+        help='Path to model file (default: models/disease_prediction_model.pkl)'
     )
     parser.add_argument(
         '--encoder',
         type=str,
-        default='label_encoder.pkl',
-        help='Path to label encoder file (default: label_encoder.pkl)'
+        default='models/label_encoder.pkl',
+        help='Path to label encoder file (default: models/label_encoder.pkl)'
     )
     parser.add_argument(
         '--verbose', '-v',

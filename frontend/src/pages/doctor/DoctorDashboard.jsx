@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getDashboardStats, getPredictions } from '../../lib/api';
+import { getDashboardStats, getPredictions, getUsersList } from '../../lib/api';
 import DiseaseDistributionChart from '../../components/dashboard/DiseaseDistributionChart';
 import RiskLevelCard from '../../components/dashboard/RiskLevelCard';
 import AbnormalFeaturesCard from '../../components/dashboard/AbnormalFeaturesCard';
@@ -24,21 +24,21 @@ const DoctorDashboard = () => {
       try {
         setLoading(true);
         
-        // Fetch all predictions to get unique user IDs
-        const allPredictionsForUsers = await getPredictions(null, 1000);
-        const uniqueUsers = [...new Set(allPredictionsForUsers.map(p => p.user_id))];
-        setAllUsers(uniqueUsers);
+        // OPTIMIZED: Fetch unique users using dedicated endpoint (fast DISTINCT query)
+        // Instead of loading 1000 predictions just to get user IDs
+        const usersResponse = await getUsersList(100);
+        setAllUsers(usersResponse.users || []);
         
-        // Fetch dashboard stats (all patients or filtered)
-        const statsData = await getDashboardStats(selectedUserId);
+        // OPTIMIZED: Fetch all data in parallel using Promise.all
+        // Further reduced limits for faster loading
+        const [statsData, predictionsData, allPredictionsData] = await Promise.all([
+          getDashboardStats(selectedUserId),
+          getPredictions(selectedUserId, 10),  // Recent predictions
+          getPredictions(selectedUserId, 30)     // Reduced from 50 to 30 for graphs (faster)
+        ]);
+        
         setStats(statsData);
-        
-        // Fetch recent predictions (all patients or filtered)
-        const predictionsData = await getPredictions(selectedUserId, 10);
         setRecentPredictions(predictionsData);
-        
-        // Fetch all predictions for graphs (limit to 100 for performance)
-        const allPredictionsData = await getPredictions(selectedUserId, 100);
         setAllPredictions(allPredictionsData);
         
         setError(null);
@@ -136,6 +136,7 @@ const DoctorDashboard = () => {
             <RecentPredictionsList
               predictions={recentPredictions}
               onPredictionClick={handlePredictionClick}
+              showPatientId={!selectedUserId}
             />
           </div>
         </div>
@@ -146,19 +147,28 @@ const DoctorDashboard = () => {
           
           {/* Feature Trends Over Time - Main Clinician Graph */}
           <div className="mb-6">
-            <FeatureTrendChart predictions={allPredictions} />
+            <FeatureTrendChart 
+              predictions={allPredictions} 
+              showPatientNames={!selectedUserId}
+            />
           </div>
 
           {/* Two Column Grid for Additional Graphs */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             {/* Feature Comparison */}
             <div>
-              <FeatureComparisonChart predictions={allPredictions} />
+              <FeatureComparisonChart 
+                predictions={allPredictions}
+                showPatientNames={!selectedUserId}
+              />
             </div>
 
             {/* Risk Trend */}
             <div>
-              <RiskTrendChart predictions={allPredictions} />
+              <RiskTrendChart 
+                predictions={allPredictions}
+                showPatientNames={!selectedUserId}
+              />
             </div>
           </div>
 
@@ -193,6 +203,7 @@ const DoctorDashboard = () => {
             <FeatureDistributionChart 
               predictions={allPredictions} 
               featureName={selectedFeature}
+              showPatientNames={!selectedUserId}
             />
           </div>
         </div>

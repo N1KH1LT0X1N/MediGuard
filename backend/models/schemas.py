@@ -94,3 +94,16 @@ class DashboardStats(BaseModel):
     risk_levels: Dict[str, int] = Field(..., description="Count of predictions by risk level")
     abnormal_features_summary: Dict[str, int] = Field(..., description="Count of abnormal features")
 
+
+class UserPreferences(BaseModel):
+    """User preferences model."""
+    theme: Optional[str] = Field(None, description="UI theme preference")
+    notifications: Optional[bool] = Field(None, description="Notification preferences")
+    language: Optional[str] = Field(None, description="Language preference")
+    other: Optional[Dict] = Field(None, description="Other preferences")
+
+
+class UpdateUserPreferencesRequest(BaseModel):
+    """Request model for updating user preferences."""
+    preferences: UserPreferences = Field(..., description="User preferences to update")
+

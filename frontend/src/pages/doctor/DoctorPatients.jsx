@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getPredictions, getDashboardStats } from '../../lib/api';
+import { getPredictions, getDashboardStats, getUsersList } from '../../lib/api';
 
 const DoctorPatients = () => {
   const [patients, setPatients] = useState([]);
@@ -14,51 +14,60 @@ const DoctorPatients = () => {
       try {
         setLoading(true);
         
-        // Fetch all predictions to get unique patients
-        const allPredictions = await getPredictions(null, 1000);
+        // OPTIMIZED: Get unique users using dedicated endpoint (fast DISTINCT query)
+        // Instead of loading 1000 predictions just to get user IDs
+        const usersResponse = await getUsersList(100);
+        const uniqueUserIds = usersResponse.users || [];
         
-        // Group predictions by user_id
-        const patientMap = new Map();
+        if (uniqueUserIds.length === 0) {
+          setPatients([]);
+          setError(null);
+          setLoading(false);
+          return;
+        }
         
-        allPredictions.forEach(prediction => {
-          const userId = prediction.user_id;
-          if (!patientMap.has(userId)) {
-            patientMap.set(userId, {
-              userId: userId,
-              predictions: [],
-              totalPredictions: 0,
-              diseases: new Set(),
-              latestPrediction: null,
-              sources: new Set()
-            });
-          }
+        // OPTIMIZED: Fetch stats and recent predictions for all users in parallel (batch requests)
+        const statsPromises = uniqueUserIds.map(userId => 
+          getDashboardStats(userId).catch(err => {
+            console.error(`Error fetching stats for ${userId}:`, err);
+            return null;
+          })
+        );
+        
+        const recentPredictionsPromises = uniqueUserIds.map(userId =>
+          getPredictions(userId, 5).catch(err => {
+            console.error(`Error fetching predictions for ${userId}:`, err);
+            return [];
+          })
+        );
+        
+        // Execute all requests in parallel
+        const [statsResults, recentPredictionsResults] = await Promise.all([
+          Promise.all(statsPromises),
+          Promise.all(recentPredictionsPromises)
+        ]);
+        
+        // Build patient list from stats and recent predictions
+        const patientList = uniqueUserIds.map((userId, index) => {
+          const stats = statsResults[index];
+          const recentPreds = recentPredictionsResults[index] || [];
+          const latestPrediction = recentPreds.length > 0 ? recentPreds[0] : null;
           
-          const patient = patientMap.get(userId);
-          patient.predictions.push(prediction);
-          patient.totalPredictions++;
+          // Extract diseases from stats
+          const diseases = stats ? Object.keys(stats.disease_distribution || {}) : [];
           
-          const disease = prediction.prediction_result?.predicted_disease;
-          if (disease) {
-            patient.diseases.add(disease);
-          }
+          // Extract sources from recent predictions
+          const sources = [...new Set(recentPreds.map(p => p.source).filter(Boolean))];
           
-          if (prediction.source) {
-            patient.sources.add(prediction.source);
-          }
-          
-          // Track latest prediction
-          if (!patient.latestPrediction || 
-              new Date(prediction.timestamp) > new Date(patient.latestPrediction.timestamp)) {
-            patient.latestPrediction = prediction;
-          }
+          return {
+            userId: userId,
+            predictions: recentPreds,
+            totalPredictions: stats?.total_predictions || 0,
+            diseases: diseases,
+            latestPrediction: latestPrediction,
+            sources: sources
+          };
         });
-        
-        // Convert to array and fetch stats for each patient
-        const patientList = Array.from(patientMap.values()).map(patient => ({
-          ...patient,
-          diseases: Array.from(patient.diseases),
-          sources: Array.from(patient.sources)
-        }));
         
         // Sort by latest prediction date (most recent first)
         patientList.sort((a, b) => {

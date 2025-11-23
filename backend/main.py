@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pathlib import Path
 import sys
+import uuid
+from datetime import datetime
 from typing import Dict, List, Optional
 
 # Add project root to path
@@ -20,13 +22,18 @@ from backend.models.schemas import (
     ErrorResponse,
     SavePredictionRequest,
     PredictionHistory,
-    DashboardStats
+    DashboardStats,
+    UserPreferences,
+    UpdateUserPreferencesRequest
 )
 from backend.services.prediction_service import PredictionService
 from backend.services.explainability_service import ExplainabilityService
 from backend.services.ocr_service import ocr_service
 from backend.services.file_parser import file_parser_service
 from backend.services.prediction_storage_service import PredictionStorageService
+from backend.services.blockchain_service import BlockchainService
+from backend.services.blockchain_committer import BlockchainCommitter
+from backend.config.database import close_db_connections
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -53,17 +60,20 @@ app.add_middleware(
 prediction_service: PredictionService = None
 explainability_service: ExplainabilityService = None
 prediction_storage: PredictionStorageService = None
+blockchain_service: Optional[BlockchainService] = None
+blockchain_committer: Optional[BlockchainCommitter] = None
 
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize services at startup."""
     global prediction_service, explainability_service, prediction_storage
+    global blockchain_service, blockchain_committer
     
     try:
         # Initialize prediction service
-        model_path = PROJECT_ROOT / "disease_prediction_model.pkl"
-        encoder_path = PROJECT_ROOT / "label_encoder.pkl"
+        model_path = PROJECT_ROOT / "models" / "disease_prediction_model.pkl"
+        encoder_path = PROJECT_ROOT / "models" / "label_encoder.pkl"
         prediction_service = PredictionService(model_path, encoder_path)
         print("✓ Prediction service initialized")
         
@@ -71,12 +81,39 @@ async def startup_event():
         explainability_service = ExplainabilityService()
         print("✓ Explainability service initialized")
         
-        # Initialize prediction storage service
+        # Initialize prediction storage service (PostgreSQL)
         prediction_storage = PredictionStorageService()
-        print("✓ Prediction storage service initialized")
+        # Create tables if they don't exist
+        await prediction_storage._create_tables()
+        print("✓ Prediction storage service initialized (PostgreSQL)")
+        
+        # Initialize blockchain service (optional - uses simulated mode by default)
+        try:
+            blockchain_service = BlockchainService()
+            blockchain_committer = BlockchainCommitter(blockchain_service, commit_interval_hours=24)
+            blockchain_committer.start()
+            # Message already printed by BlockchainService.__init__
+        except Exception as e:
+            print(f"⚠️  Blockchain service not initialized: {e}")
+            print("   Continuing without blockchain (hash chain still works)")
+            blockchain_service = None
+            blockchain_committer = None
+            
     except Exception as e:
         print(f"⚠️  Error initializing services: {e}")
         raise
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown."""
+    global blockchain_committer
+    
+    if blockchain_committer:
+        blockchain_committer.stop()
+    
+    await close_db_connections()
+    print("✓ Services shut down")
 
 
 @app.get("/")
@@ -92,7 +129,12 @@ async def root():
             "upload_csv": "/api/upload/csv",
             "save_prediction": "/api/predictions/save",
             "get_predictions": "/api/predictions",
-            "get_stats": "/api/predictions/stats"
+            "get_stats": "/api/predictions/stats",
+            "create_user": "/api/users/create",
+            "get_user": "/api/users/{user_id}",
+            "update_preferences": "/api/users/{user_id}/preferences",
+            "hash_chain_verify": "/api/hash-chain/verify",
+            "blockchain_verify": "/api/blockchain/verify"
         }
     }
 
@@ -100,10 +142,26 @@ async def root():
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint."""
+    db_status = False
+    blockchain_status = False
+    
+    if prediction_storage:
+        try:
+            # Quick database check
+            await prediction_storage.get_predictions(limit=1)
+            db_status = True
+        except:
+            pass
+    
+    if blockchain_service:
+        blockchain_status = blockchain_service.is_connected()
+    
     return {
         "status": "healthy",
         "prediction_service": prediction_service is not None,
-        "explainability_service": explainability_service is not None
+        "explainability_service": explainability_service is not None,
+        "database": db_status,
+        "blockchain": blockchain_status
     }
 
 
@@ -135,9 +193,16 @@ async def predict_disease(request: PredictionRequest):
         explainability_json = {}
         explainability_html = ""
         if explainability_service:
-            explainability_json, explainability_html = explainability_service.generate_explanation(
+            try:
+                explainability_json, explainability_html = explainability_service.generate_explanation(
                 request.features
             )
+                if not explainability_json:
+                    print("⚠️  Warning: explainability_json is empty after generation")
+            except Exception as e:
+                print(f"⚠️  Error generating explainability: {e}")
+                import traceback
+                traceback.print_exc()
         
         return PredictionResponse(
             predicted_disease=disease,
@@ -277,7 +342,7 @@ async def upload_csv(file: UploadFile = File(...)):
 @app.post("/api/predictions/save")
 async def save_prediction(request: SavePredictionRequest):
     """
-    Save a prediction to storage.
+    Save a prediction to storage with hash chain.
     
     Args:
         request: SavePredictionRequest with user_id, input_features, prediction_result, and source
@@ -289,13 +354,13 @@ async def save_prediction(request: SavePredictionRequest):
         raise HTTPException(status_code=503, detail="Prediction storage service not initialized")
     
     try:
-        prediction_id = prediction_storage.save_prediction(
+        prediction_id = await prediction_storage.save_prediction(
             user_id=request.user_id,
             input_features=request.input_features,
             prediction_result=request.prediction_result,
             source=request.source
         )
-        return {"prediction_id": prediction_id, "message": "Prediction saved successfully"}
+        return {"prediction_id": prediction_id, "message": "Prediction saved successfully with hash chain"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error saving prediction: {str(e)}")
 
@@ -319,7 +384,7 @@ async def get_predictions(
         raise HTTPException(status_code=503, detail="Prediction storage service not initialized")
     
     try:
-        predictions = prediction_storage.get_predictions(user_id=user_id, limit=limit)
+        predictions = await prediction_storage.get_predictions(user_id=user_id, limit=limit)
         return predictions
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving predictions: {str(e)}")
@@ -344,7 +409,7 @@ async def get_user_predictions(
         raise HTTPException(status_code=503, detail="Prediction storage service not initialized")
     
     try:
-        predictions = prediction_storage.get_predictions(user_id=user_id, limit=limit)
+        predictions = await prediction_storage.get_predictions(user_id=user_id, limit=limit)
         return predictions
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving user predictions: {str(e)}")
@@ -356,6 +421,7 @@ async def get_dashboard_stats(
 ):
     """
     Get aggregated statistics for dashboard.
+    Optimized for performance.
     
     Args:
         user_id: Optional user ID to filter by
@@ -367,10 +433,269 @@ async def get_dashboard_stats(
         raise HTTPException(status_code=503, detail="Prediction storage service not initialized")
     
     try:
-        stats = prediction_storage.get_dashboard_stats(user_id=user_id)
+        stats = await prediction_storage.get_dashboard_stats(user_id=user_id)
         return DashboardStats(**stats)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving dashboard stats: {str(e)}")
+
+
+@app.get("/api/users/list")
+async def get_users_list(
+    limit: Optional[int] = Query(100, description="Limit number of users")
+):
+    """
+    Get list of unique user IDs who have predictions.
+    Optimized: Uses DISTINCT query instead of loading all predictions.
+    
+    Args:
+        limit: Optional limit on number of users
+        
+    Returns:
+        List of user IDs
+    """
+    if not prediction_storage:
+        raise HTTPException(status_code=503, detail="Prediction storage service not initialized")
+    
+    try:
+        user_ids = await prediction_storage.get_unique_users(limit=limit)
+        return {"users": user_ids, "count": len(user_ids)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving users list: {str(e)}")
+
+
+@app.post("/api/users/create")
+async def create_user():
+    """
+    Create a new user and return user_id.
+    User is stored in Supabase database.
+    
+    Returns:
+        Dictionary with user_id
+    """
+    if not prediction_storage:
+        raise HTTPException(status_code=503, detail="Prediction storage service not initialized")
+    
+    try:
+        user_id = f"user_{int(datetime.utcnow().timestamp() * 1000)}_{uuid.uuid4().hex[:9]}"
+        
+        # Create user in database
+        async with prediction_storage.async_session_maker() as session:
+            from backend.models.database_models import User
+            user = User(
+                id=user_id,
+                preferences={},
+                metadata={}
+            )
+            session.add(user)
+            await session.commit()
+        
+        return {
+            "user_id": user_id,
+            "message": "User created successfully and stored in database"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating user: {str(e)}")
+
+
+@app.get("/api/users/{user_id}")
+async def get_user(user_id: str):
+    """
+    Get user information and statistics.
+    
+    Args:
+        user_id: User ID
+        
+    Returns:
+        Dictionary with user info, stats, and preferences
+    """
+    if not prediction_storage:
+        raise HTTPException(status_code=503, detail="Prediction storage service not initialized")
+    
+    try:
+        # Get user from database
+        async with prediction_storage.async_session_maker() as session:
+            from backend.models.database_models import User
+            from sqlalchemy import select
+            
+            result = await session.execute(
+                select(User).where(User.id == user_id)
+            )
+            user = result.scalar_one_or_none()
+            
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            user_dict = user.to_dict()
+        
+        # Get stats
+        stats = await prediction_storage.get_dashboard_stats(user_id=user_id)
+        
+        return {
+            "user_id": user_id,
+            "exists": True,
+            "created_at": user_dict["created_at"],
+            "updated_at": user_dict["updated_at"],
+            "preferences": user_dict["preferences"],
+            "metadata": user_dict["metadata"],
+            "total_predictions": stats["total_predictions"],
+            "diseases_detected": list(stats["disease_distribution"].keys())
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving user info: {str(e)}")
+
+
+@app.put("/api/users/{user_id}/preferences")
+async def update_user_preferences(user_id: str, request: UpdateUserPreferencesRequest):
+    """
+    Update user preferences.
+    
+    Args:
+        user_id: User ID
+        request: UpdateUserPreferencesRequest with preferences
+        
+    Returns:
+        Dictionary with updated preferences
+    """
+    if not prediction_storage:
+        raise HTTPException(status_code=503, detail="Prediction storage service not initialized")
+    
+    try:
+        async with prediction_storage.async_session_maker() as session:
+            from backend.models.database_models import User
+            from sqlalchemy import select, update
+            
+            # Check if user exists
+            result = await session.execute(
+                select(User).where(User.id == user_id)
+            )
+            user = result.scalar_one_or_none()
+            
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            # Update preferences
+            preferences_dict = request.preferences.dict(exclude_none=True)
+            current_preferences = user.preferences or {}
+            current_preferences.update(preferences_dict)
+            
+            await session.execute(
+                update(User)
+                .where(User.id == user_id)
+                .values(
+                    preferences=current_preferences,
+                    updated_at=datetime.utcnow()
+                )
+            )
+            await session.commit()
+            
+            return {
+                "user_id": user_id,
+                "preferences": current_preferences,
+                "message": "Preferences updated successfully"
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating preferences: {str(e)}")
+
+
+@app.get("/api/hash-chain")
+async def get_hash_chain(
+    limit: Optional[int] = Query(100, description="Limit number of results")
+):
+    """
+    Get hash chain entries with blockchain data.
+    
+    Args:
+        limit: Optional limit on number of results
+        
+    Returns:
+        List of hash chain entries with prediction and blockchain info
+    """
+    if not prediction_storage:
+        raise HTTPException(status_code=503, detail="Prediction storage service not initialized")
+    
+    try:
+        from backend.models.database_models import HashChain, Prediction
+        from backend.config.database import get_async_session_maker
+        from sqlalchemy import select, desc
+        
+        async_session_maker = get_async_session_maker()
+        async with async_session_maker() as session:
+            # Get hash chain entries with prediction data
+            query = (
+                select(HashChain, Prediction)
+                .join(Prediction, HashChain.prediction_id == Prediction.id)
+                .order_by(desc(HashChain.id))
+                .limit(limit)
+            )
+            
+            result = await session.execute(query)
+            rows = result.all()
+            
+            entries = []
+            for hash_chain, prediction in rows:
+                entries.append({
+                    "id": hash_chain.id,
+                    "prediction_id": hash_chain.prediction_id,
+                    "previous_hash": hash_chain.previous_hash,
+                    "current_hash": hash_chain.current_hash,
+                    "block_timestamp": hash_chain.block_timestamp.isoformat() if hash_chain.block_timestamp else None,
+                    "blockchain_tx_hash": hash_chain.blockchain_tx_hash,
+                    "blockchain_block_number": hash_chain.blockchain_block_number,
+                    "created_at": hash_chain.created_at.isoformat() if hash_chain.created_at else None,
+                    "prediction": {
+                        "user_id": prediction.user_id,
+                        "timestamp": prediction.timestamp.isoformat() if prediction.timestamp else None,
+                        "source": prediction.source,
+                        "predicted_disease": prediction.prediction_result.get("predicted_disease") if prediction.prediction_result else None
+                    }
+                })
+            
+            return entries
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving hash chain: {str(e)}")
+
+
+@app.get("/api/hash-chain/verify")
+async def verify_hash_chain():
+    """
+    Verify the integrity of the hash chain.
+    
+    Returns:
+        Dictionary with verification results
+    """
+    if not prediction_storage:
+        raise HTTPException(status_code=503, detail="Prediction storage service not initialized")
+    
+    try:
+        result = await prediction_storage.verify_hash_chain()
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error verifying hash chain: {str(e)}")
+
+
+@app.get("/api/blockchain/verify/{tx_hash}")
+async def verify_blockchain(tx_hash: str):
+    """
+    Verify a transaction on the blockchain.
+    
+    Args:
+        tx_hash: Transaction hash to verify
+        
+    Returns:
+        Dictionary with verification results
+    """
+    if not blockchain_service:
+        raise HTTPException(status_code=503, detail="Blockchain service not initialized")
+    
+    try:
+        result = blockchain_service.verify_on_blockchain(tx_hash)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error verifying blockchain transaction: {str(e)}")
 
 
 if __name__ == "__main__":

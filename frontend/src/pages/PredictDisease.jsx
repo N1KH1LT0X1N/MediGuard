@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { predictDisease, uploadImage, uploadPDF, uploadCSV, savePrediction } from '../lib/api';
+import { predictDisease, uploadImage, uploadPDF, uploadCSV, savePrediction, createUser } from '../lib/api';
 import ExplanationChart from '../components/ExplanationChart';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
 
@@ -46,22 +46,50 @@ const PredictDisease = () => {
   const resultsRef = useRef(null);
   const [currentSource, setCurrentSource] = useState('manual'); // Track source of current prediction
   
-  // Get or create user ID from localStorage
+  const [userId, setUserId] = useState(null);
+  const [userIdLoading, setUserIdLoading] = useState(true);
+
+  // Get or create user ID from API
+  useEffect(() => {
+    const initializeUser = async () => {
+      try {
+        // Check if user_id exists in sessionStorage (temporary session-based)
+        let storedUserId = sessionStorage.getItem('mediguard_user_id');
+        
+        if (!storedUserId) {
+          // Create new user via API
+          const userData = await createUser();
+          storedUserId = userData.user_id;
+          sessionStorage.setItem('mediguard_user_id', storedUserId);
+        }
+        
+        setUserId(storedUserId);
+      } catch (error) {
+        console.error('Error initializing user:', error);
+        // Fallback: generate client-side user_id
+        const fallbackUserId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        sessionStorage.setItem('mediguard_user_id', fallbackUserId);
+        setUserId(fallbackUserId);
+      } finally {
+        setUserIdLoading(false);
+      }
+    };
+
+    initializeUser();
+  }, []);
+
   const getUserId = () => {
-    let userId = localStorage.getItem('mediguard_user_id');
-    if (!userId) {
-      userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      localStorage.setItem('mediguard_user_id', userId);
-    }
-    return userId;
+    return userId || sessionStorage.getItem('mediguard_user_id') || 'unknown_user';
   };
 
   // Auto-save prediction result
   const autoSavePrediction = async (result, inputFeatures, source) => {
     try {
-      const userId = getUserId();
-      await savePrediction(userId, inputFeatures, result, source);
-      console.log('Prediction saved successfully');
+      const currentUserId = getUserId();
+      if (currentUserId && currentUserId !== 'unknown_user') {
+        await savePrediction(currentUserId, inputFeatures, result, source);
+        console.log('Prediction saved successfully with hash chain');
+      }
     } catch (error) {
       console.error('Failed to save prediction:', error);
       // Don't show error to user - saving is background operation

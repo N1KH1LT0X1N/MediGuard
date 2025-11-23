@@ -1,6 +1,6 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-const FeatureDistributionChart = ({ predictions, featureName }) => {
+const FeatureDistributionChart = ({ predictions, featureName, showPatientNames = false }) => {
   // Process data: create histogram bins for the selected feature
   const processData = () => {
     if (!predictions || !featureName || predictions.length === 0) return [];
@@ -61,23 +61,50 @@ const FeatureDistributionChart = ({ predictions, featureName }) => {
       };
     });
 
-    // Count values in each bin
-    values.forEach(value => {
-      let binIndex = Math.floor((value - min) / binSize);
-      // Handle edge case where value equals max (should go in last bin)
-      if (value >= max) {
-        binIndex = numBins - 1;
-      } else if (binIndex >= numBins) {
-        binIndex = numBins - 1;
-      } else if (binIndex < 0) {
-        binIndex = 0;
-      }
-      
-      // Ensure bin exists before accessing
-      if (bins[binIndex]) {
-        bins[binIndex].count++;
-      }
-    });
+    // Count values in each bin and track patient names if needed
+    if (showPatientNames) {
+      // Map each prediction to its value for patient tracking
+      predictions.forEach(pred => {
+        const val = pred.input_features?.[featureName];
+        if (val !== null && val !== undefined && !isNaN(val)) {
+          const parsedVal = parseFloat(val);
+          let binIndex = Math.floor((parsedVal - min) / binSize);
+          if (parsedVal >= max) {
+            binIndex = numBins - 1;
+          } else if (binIndex >= numBins) {
+            binIndex = numBins - 1;
+          } else if (binIndex < 0) {
+            binIndex = 0;
+          }
+          
+          if (bins[binIndex]) {
+            bins[binIndex].count++;
+            if (!bins[binIndex].patientNames) {
+              bins[binIndex].patientNames = [];
+            }
+            if (pred.user_id && !bins[binIndex].patientNames.includes(pred.user_id)) {
+              bins[binIndex].patientNames.push(pred.user_id);
+            }
+          }
+        }
+      });
+    } else {
+      // Original counting logic (faster when not tracking patients)
+      values.forEach(value => {
+        let binIndex = Math.floor((value - min) / binSize);
+        if (value >= max) {
+          binIndex = numBins - 1;
+        } else if (binIndex >= numBins) {
+          binIndex = numBins - 1;
+        } else if (binIndex < 0) {
+          binIndex = 0;
+        }
+        
+        if (bins[binIndex]) {
+          bins[binIndex].count++;
+        }
+      });
+    }
 
     return bins;
   };
@@ -139,7 +166,15 @@ const FeatureDistributionChart = ({ predictions, featureName }) => {
             formatter={(value) => [`${value} occurrence${value !== 1 ? 's' : ''}`, 'Count']}
             labelFormatter={(label, payload) => {
               if (payload && payload[0] && payload[0].payload) {
-                return `Range: ${payload[0].payload.range}`;
+                const range = payload[0].payload.range;
+                if (showPatientNames && payload[0].payload.patientNames) {
+                  const patientList = payload[0].payload.patientNames.slice(0, 3).join(', ');
+                  const more = payload[0].payload.patientNames.length > 3 
+                    ? ` (+${payload[0].payload.patientNames.length - 3} more)` 
+                    : '';
+                  return `Range: ${range}${patientList ? ` - Patients: ${patientList}${more}` : ''}`;
+                }
+                return `Range: ${range}`;
               }
               return `Value: ${label}`;
             }}

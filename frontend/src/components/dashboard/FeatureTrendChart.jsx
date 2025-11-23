@@ -1,6 +1,6 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-const FeatureTrendChart = ({ predictions }) => {
+const FeatureTrendChart = ({ predictions, showPatientNames = false }) => {
   // Key features to track (clinically important)
   const keyFeatures = [
     'Glucose',
@@ -32,7 +32,10 @@ const FeatureTrendChart = ({ predictions }) => {
           month: 'short', 
           day: 'numeric' 
         }),
-        timestamp: pred.timestamp
+        timestamp: pred.timestamp,
+        patientName: showPatientNames && pred.user_id 
+          ? (pred.user_id.length > 20 ? `${pred.user_id.substring(0, 20)}...` : pred.user_id)
+          : null
       };
 
       // Add feature values
@@ -111,6 +114,15 @@ const FeatureTrendChart = ({ predictions }) => {
               borderRadius: '8px',
             }}
             formatter={(value, name) => [value?.toFixed(2) || 'N/A', name]}
+            labelFormatter={(label, payload) => {
+              if (payload && payload[0] && payload[0].payload) {
+                const patientName = payload[0].payload.patientName;
+                if (patientName) {
+                  return `${label} - Patient: ${patientName}`;
+                }
+              }
+              return label;
+            }}
           />
           <Legend 
             wrapperStyle={{ paddingTop: '20px' }}

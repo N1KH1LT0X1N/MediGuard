@@ -47,7 +47,7 @@ Once the server is running, visit:
 
 ## Notes
 
-- Ensure model files (`disease_prediction_model.pkl`, `label_encoder.pkl`) are in project root
+- Ensure model files (`disease_prediction_model.pkl`, `label_encoder.pkl`) are in `models/` directory
 - Ensure training data (`cleaned_test.csv`) is in project root for explainability
 - CORS is configured for `http://localhost:5173` (Vite default port)
 
