@@ -13,6 +13,16 @@ const PatientNavBar = () => {
             {/* Navigation Links - Evenly distributed */}
             <div className="flex items-center justify-evenly flex-1">
               <Link
+                to="/home/patient/dashboard"
+                className={`px-4 py-2 text-base font-bold whitespace-nowrap transition-colors duration-200 ${
+                  isActive('/home/patient/dashboard')
+                    ? 'text-black bg-[#6ee000] rounded'
+                    : 'text-black hover:bg-[#6ee000] rounded'
+                }`}
+              >
+                Dashboard
+              </Link>
+              <Link
                 to="/home/patient/predict"
                 className={`px-4 py-2 text-base font-bold whitespace-nowrap transition-colors duration-200 ${
                   isActive('/home/patient/predict')

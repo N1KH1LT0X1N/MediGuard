@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { predictDisease, uploadImage, uploadPDF, uploadCSV } from '../lib/api';
+import { predictDisease, uploadImage, uploadPDF, uploadCSV, savePrediction } from '../lib/api';
 import ExplanationChart from '../components/ExplanationChart';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
 
@@ -44,11 +44,36 @@ const PredictDisease = () => {
   const [predictionResult, setPredictionResult] = useState(null);
   const [error, setError] = useState(null);
   const resultsRef = useRef(null);
+  const [currentSource, setCurrentSource] = useState('manual'); // Track source of current prediction
+  
+  // Get or create user ID from localStorage
+  const getUserId = () => {
+    let userId = localStorage.getItem('mediguard_user_id');
+    if (!userId) {
+      userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      localStorage.setItem('mediguard_user_id', userId);
+    }
+    return userId;
+  };
+
+  // Auto-save prediction result
+  const autoSavePrediction = async (result, inputFeatures, source) => {
+    try {
+      const userId = getUserId();
+      await savePrediction(userId, inputFeatures, result, source);
+      console.log('Prediction saved successfully');
+    } catch (error) {
+      console.error('Failed to save prediction:', error);
+      // Don't show error to user - saving is background operation
+    }
+  };
+
   const [missingFeaturesModal, setMissingFeaturesModal] = useState({
     isOpen: false,
     extractedFeatures: {},
     missingFeatureNames: [],
-    missingFeatureData: {}
+    missingFeatureData: {},
+    source: 'manual'
   });
 
   const medicalFields = [
@@ -178,7 +203,8 @@ const PredictDisease = () => {
     });
 
     // Close modal and proceed with prediction
-    setMissingFeaturesModal({ isOpen: false, extractedFeatures: {}, missingFeatureNames: [], missingFeatureData: {} });
+    const source = missingFeaturesModal.source || 'manual';
+    setMissingFeaturesModal({ isOpen: false, extractedFeatures: {}, missingFeatureNames: [], missingFeatureData: {}, source: 'manual' });
     setIsAnalyzing(true);
     setCurrentIndex(0);
     setAnalysisText(analysisSteps[0]);
@@ -203,6 +229,10 @@ const PredictDisease = () => {
       setPredictionResult(result);
       setIsAnalyzing(false);
       setAnalysisText('Analysis complete! Results ready.');
+      
+      // Auto-save prediction (background operation, don't wait)
+      // Use source from modal (stored before closing)
+      autoSavePrediction(result, allFeatures, source);
       
       setTimeout(() => {
         resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -270,6 +300,7 @@ const PredictDisease = () => {
     setAnalysisText(analysisSteps[0]);
     setError(null);
     setPredictionResult(null);
+    setCurrentSource('manual'); // Set source for manual entry
     
     // Animate through analysis steps
     let index = 0;
@@ -295,6 +326,9 @@ const PredictDisease = () => {
       setPredictionResult(result);
       setIsAnalyzing(false);
       setAnalysisText('Analysis complete! Results ready.');
+      
+      // Auto-save prediction (background operation, don't wait)
+      autoSavePrediction(result, features, 'manual');
       
       // Scroll to results after a brief delay
       setTimeout(() => {
@@ -410,6 +444,10 @@ const PredictDisease = () => {
     setError(null);
     setPredictionResult(null);
     
+    // Set source based on file type
+    const sourceMap = { 'png': 'image', 'pdf': 'pdf', 'csv': 'csv' };
+    setCurrentSource(sourceMap[type] || 'manual');
+    
     // Animate through analysis steps
     let index = 0;
     const interval = setInterval(() => {
@@ -467,7 +505,8 @@ const PredictDisease = () => {
           isOpen: true,
           extractedFeatures: features,
           missingFeatureNames: missingFeatures,
-          missingFeatureData: missingData
+          missingFeatureData: missingData,
+          source: sourceMap[type] || 'manual' // Store source for when completed
         });
         return; // Exit early, wait for user to fill missing features
       }
@@ -486,6 +525,9 @@ const PredictDisease = () => {
       setPredictionResult(result);
       setIsAnalyzing(false);
       setAnalysisText('Analysis complete! Results ready.');
+      
+      // Auto-save prediction (background operation, don't wait)
+      autoSavePrediction(result, features, sourceMap[type] || 'manual');
       
       // Scroll to results after a brief delay
       setTimeout(() => {
@@ -695,25 +737,25 @@ const PredictDisease = () => {
                 }
               }}
             >
-              <div className="bg-white rounded-lg border-2 border-black p-6">
-                <div className="mb-6">
-                  <h2 className="text-2xl font-semibold text-gray-900 tracking-tight mb-2">Enter Medical Parameters</h2>
-                  <p className="text-sm text-gray-600 font-normal">Fill in all the required medical parameters to get disease prediction</p>
-                </div>
+            <div className="bg-white rounded-lg border-2 border-black p-6">
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-gray-900 tracking-tight mb-2">Enter Medical Parameters</h2>
+                <p className="text-sm text-gray-600 font-normal">Fill in all the required medical parameters to get disease prediction</p>
+              </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {medicalFields.map((field) => (
-                    <div key={field.key} className="flex flex-col">
-                      <label className="text-sm font-medium text-gray-900 mb-2">
-                        {field.label}
-                        <span className="text-red-600 ml-1">*</span>
-                        {field.unit && <span className="text-gray-500 font-normal ml-1">({field.unit})</span>}
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={manualData[field.key]}
-                        onChange={(e) => handleManualDataChange(field.key, e.target.value)}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {medicalFields.map((field) => (
+                  <div key={field.key} className="flex flex-col">
+                    <label className="text-sm font-medium text-gray-900 mb-2">
+                      {field.label}
+                      <span className="text-red-600 ml-1">*</span>
+                      {field.unit && <span className="text-gray-500 font-normal ml-1">({field.unit})</span>}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={manualData[field.key]}
+                      onChange={(e) => handleManualDataChange(field.key, e.target.value)}
                         onKeyDown={(e) => {
                           // Prevent Enter key from submitting
                           if (e.key === 'Enter') {
@@ -721,39 +763,39 @@ const PredictDisease = () => {
                             e.stopPropagation();
                           }
                         }}
-                        placeholder={`Enter a value between ${field.min} to ${field.max}`}
-                        className={`px-4 py-2 border-2 rounded-lg focus:outline-none transition-colors duration-200 ${
-                          validationErrors[field.key]
-                            ? 'border-red-500 focus:border-red-600'
-                            : 'border-gray-300 focus:border-[#7FFF00]'
-                        }`}
-                        required
-                      />
-                      {validationErrors[field.key] && (
-                        <span className="text-red-600 text-xs mt-1 font-medium">
-                          {validationErrors[field.key]}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Analyze Button */}
-                <div className="mt-8 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={handleManualAnalyze}
-                    disabled={!isAllFieldsValid() || isAnalyzing}
-                    className={`px-12 py-4 rounded-lg font-bold text-lg transition-all duration-200 ${
-                      isAllFieldsValid() && !isAnalyzing
-                        ? 'bg-[#7FFF00] hover:bg-[#6ee000] text-black cursor-pointer'
-                        : 'bg-gray-400 text-gray-600 cursor-not-allowed'
-                    }`}
-                  >
-                    {isAnalyzing ? 'Analyzing...' : 'Analyze Data'}
-                  </button>
-                </div>
+                      placeholder={`Enter a value between ${field.min} to ${field.max}`}
+                      className={`px-4 py-2 border-2 rounded-lg focus:outline-none transition-colors duration-200 ${
+                        validationErrors[field.key]
+                          ? 'border-red-500 focus:border-red-600'
+                          : 'border-gray-300 focus:border-[#7FFF00]'
+                      }`}
+                      required
+                    />
+                    {validationErrors[field.key] && (
+                      <span className="text-red-600 text-xs mt-1 font-medium">
+                        {validationErrors[field.key]}
+                      </span>
+                    )}
+                  </div>
+                ))}
               </div>
+
+              {/* Analyze Button */}
+              <div className="mt-8 flex justify-center">
+                <button
+                    type="button"
+                  onClick={handleManualAnalyze}
+                  disabled={!isAllFieldsValid() || isAnalyzing}
+                  className={`px-12 py-4 rounded-lg font-bold text-lg transition-all duration-200 ${
+                    isAllFieldsValid() && !isAnalyzing
+                      ? 'bg-[#7FFF00] hover:bg-[#6ee000] text-black cursor-pointer'
+                      : 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                  }`}
+                >
+                  {isAnalyzing ? 'Analyzing...' : 'Analyze Data'}
+                </button>
+              </div>
+            </div>
             </form>
           </div>
         )}
@@ -1060,7 +1102,7 @@ const PredictDisease = () => {
 
             {/* Probability Chart */}
             <div className="mb-8 bg-gray-50 rounded-xl p-6 border-2 border-gray-200">
-              <div className="mb-6">
+            <div className="mb-6">
                 <h3 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">Disease Probabilities</h3>
                 <p className="text-sm text-gray-600">Confidence scores for all possible diagnoses</p>
               </div>
@@ -1139,7 +1181,7 @@ const PredictDisease = () => {
               >
                 Download Report
               </button>
-            </div>
+              </div>
           </div>
         </div>
       )}
@@ -1184,7 +1226,7 @@ const PredictDisease = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    setMissingFeaturesModal({ isOpen: false, extractedFeatures: {}, missingFeatureNames: [], missingFeatureData: {} });
+                    setMissingFeaturesModal({ isOpen: false, extractedFeatures: {}, missingFeatureNames: [], missingFeatureData: {}, source: 'manual' });
                     setValidationErrors({});
                   }}
                   className="text-gray-300 hover:text-white transition-colors"
@@ -1256,7 +1298,7 @@ const PredictDisease = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    setMissingFeaturesModal({ isOpen: false, extractedFeatures: {}, missingFeatureNames: [], missingFeatureData: {} });
+                    setMissingFeaturesModal({ isOpen: false, extractedFeatures: {}, missingFeatureNames: [], missingFeatureData: {}, source: 'manual' });
                     setValidationErrors({});
                   }}
                   className="flex-1 px-6 py-3 rounded-lg font-bold text-base transition-all duration-200 bg-gray-200 hover:bg-gray-300 text-gray-800 shadow-lg"

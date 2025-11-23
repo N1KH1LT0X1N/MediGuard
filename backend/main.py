@@ -2,12 +2,12 @@
 FastAPI main application for MediGuard AI backend.
 """
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pathlib import Path
 import sys
-from typing import Dict
+from typing import Dict, List, Optional
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -17,12 +17,16 @@ from backend.models.schemas import (
     PredictionRequest,
     PredictionResponse,
     FileUploadResponse,
-    ErrorResponse
+    ErrorResponse,
+    SavePredictionRequest,
+    PredictionHistory,
+    DashboardStats
 )
 from backend.services.prediction_service import PredictionService
 from backend.services.explainability_service import ExplainabilityService
 from backend.services.ocr_service import ocr_service
 from backend.services.file_parser import file_parser_service
+from backend.services.prediction_storage_service import PredictionStorageService
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -48,12 +52,13 @@ app.add_middleware(
 # Global services (initialized at startup)
 prediction_service: PredictionService = None
 explainability_service: ExplainabilityService = None
+prediction_storage: PredictionStorageService = None
 
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize services at startup."""
-    global prediction_service, explainability_service
+    global prediction_service, explainability_service, prediction_storage
     
     try:
         # Initialize prediction service
@@ -65,6 +70,10 @@ async def startup_event():
         # Initialize explainability service
         explainability_service = ExplainabilityService()
         print("✓ Explainability service initialized")
+        
+        # Initialize prediction storage service
+        prediction_storage = PredictionStorageService()
+        print("✓ Prediction storage service initialized")
     except Exception as e:
         print(f"⚠️  Error initializing services: {e}")
         raise
@@ -80,7 +89,10 @@ async def root():
             "predict": "/api/predict",
             "upload_image": "/api/upload/image",
             "upload_pdf": "/api/upload/pdf",
-            "upload_csv": "/api/upload/csv"
+            "upload_csv": "/api/upload/csv",
+            "save_prediction": "/api/predictions/save",
+            "get_predictions": "/api/predictions",
+            "get_stats": "/api/predictions/stats"
         }
     }
 
@@ -260,6 +272,105 @@ async def upload_csv(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"File parsing error: {str(e)}")
+
+
+@app.post("/api/predictions/save")
+async def save_prediction(request: SavePredictionRequest):
+    """
+    Save a prediction to storage.
+    
+    Args:
+        request: SavePredictionRequest with user_id, input_features, prediction_result, and source
+        
+    Returns:
+        Dictionary with prediction_id
+    """
+    if not prediction_storage:
+        raise HTTPException(status_code=503, detail="Prediction storage service not initialized")
+    
+    try:
+        prediction_id = prediction_storage.save_prediction(
+            user_id=request.user_id,
+            input_features=request.input_features,
+            prediction_result=request.prediction_result,
+            source=request.source
+        )
+        return {"prediction_id": prediction_id, "message": "Prediction saved successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error saving prediction: {str(e)}")
+
+
+@app.get("/api/predictions", response_model=List[PredictionHistory])
+async def get_predictions(
+    user_id: Optional[str] = Query(None, description="Filter by user ID"),
+    limit: Optional[int] = Query(None, description="Limit number of results")
+):
+    """
+    Get predictions, optionally filtered by user_id.
+    
+    Args:
+        user_id: Optional user ID to filter by
+        limit: Optional limit on number of results
+        
+    Returns:
+        List of prediction history records
+    """
+    if not prediction_storage:
+        raise HTTPException(status_code=503, detail="Prediction storage service not initialized")
+    
+    try:
+        predictions = prediction_storage.get_predictions(user_id=user_id, limit=limit)
+        return predictions
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving predictions: {str(e)}")
+
+
+@app.get("/api/predictions/user/{user_id}", response_model=List[PredictionHistory])
+async def get_user_predictions(
+    user_id: str,
+    limit: Optional[int] = Query(None, description="Limit number of results")
+):
+    """
+    Get predictions for a specific user.
+    
+    Args:
+        user_id: User ID
+        limit: Optional limit on number of results
+        
+    Returns:
+        List of prediction history records for the user
+    """
+    if not prediction_storage:
+        raise HTTPException(status_code=503, detail="Prediction storage service not initialized")
+    
+    try:
+        predictions = prediction_storage.get_predictions(user_id=user_id, limit=limit)
+        return predictions
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving user predictions: {str(e)}")
+
+
+@app.get("/api/predictions/stats", response_model=DashboardStats)
+async def get_dashboard_stats(
+    user_id: Optional[str] = Query(None, description="Filter by user ID")
+):
+    """
+    Get aggregated statistics for dashboard.
+    
+    Args:
+        user_id: Optional user ID to filter by
+        
+    Returns:
+        DashboardStats with aggregated statistics
+    """
+    if not prediction_storage:
+        raise HTTPException(status_code=503, detail="Prediction storage service not initialized")
+    
+    try:
+        stats = prediction_storage.get_dashboard_stats(user_id=user_id)
+        return DashboardStats(**stats)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving dashboard stats: {str(e)}")
 
 
 if __name__ == "__main__":
