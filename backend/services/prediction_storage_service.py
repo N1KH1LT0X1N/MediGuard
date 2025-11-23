@@ -1,65 +1,47 @@
 """
 Prediction Storage Service for saving and retrieving prediction history.
-Uses JSON file storage for persistence.
+Uses PostgreSQL database with hash chain for immutable audit trail.
 """
 
-import json
-from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime
 import uuid
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, and_
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-STORAGE_DIR = PROJECT_ROOT / "backend" / "data"
-STORAGE_FILE = STORAGE_DIR / "predictions.json"
+from backend.config.database import get_async_session_maker, get_async_engine
+from backend.models.database_models import User, Prediction, HashChain, Base
+from backend.services.hash_chain_service import HashChainService
 
 
 class PredictionStorageService:
-    """Service for storing and retrieving prediction history."""
+    """Service for storing and retrieving prediction history with hash chain."""
     
-    def __init__(self, storage_file: Optional[Path] = None):
-        """
-        Initialize prediction storage service.
-        
-        Args:
-            storage_file: Path to JSON storage file (default: backend/data/predictions.json)
-        """
-        self.storage_file = storage_file or STORAGE_FILE
-        self._ensure_storage_dir()
-        self._ensure_storage_file()
+    def __init__(self):
+        """Initialize prediction storage service."""
+        self.async_session_maker = get_async_session_maker()
+        self.hash_chain_service = HashChainService()
     
-    def _ensure_storage_dir(self):
-        """Ensure storage directory exists."""
-        self.storage_file.parent.mkdir(parents=True, exist_ok=True)
-    
-    def _ensure_storage_file(self):
-        """Ensure storage file exists with empty list."""
-        if not self.storage_file.exists():
-            with open(self.storage_file, 'w') as f:
-                json.dump([], f)
-    
-    def _load_predictions(self) -> List[Dict]:
-        """Load all predictions from storage file."""
+    async def _create_tables(self):
+        """Create database tables if they don't exist."""
         try:
-            with open(self.storage_file, 'r') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, FileNotFoundError):
-            return []
+            engine = get_async_engine()
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+        except Exception as e:
+            # If connection fails, tables might already exist (created via SQL Editor)
+            # This is not critical - tables will be created on first use if needed
+            print(f"⚠️  Could not auto-create tables (they may already exist): {str(e)[:200]}")
     
-    def _save_predictions(self, predictions: List[Dict]):
-        """Save predictions to storage file."""
-        with open(self.storage_file, 'w') as f:
-            json.dump(predictions, f, indent=2)
-    
-    def save_prediction(
+    async def save_prediction(
         self,
         user_id: str,
         input_features: Dict[str, float],
         prediction_result: Dict,
-        source: str = "manual"  # "manual", "pdf", "csv", "image"
+        source: str = "manual"
     ) -> str:
         """
-        Save a prediction to storage.
+        Save a prediction to storage with hash chain entry.
         
         Args:
             user_id: User identifier
@@ -73,46 +55,108 @@ class PredictionStorageService:
         prediction_id = str(uuid.uuid4())
         timestamp = datetime.utcnow().isoformat()
         
-        prediction_record = {
-            "id": prediction_id,
-            "user_id": user_id,
-            "timestamp": timestamp,
-            "source": source,
-            "input_features": input_features,
-            "prediction_result": prediction_result
-        }
-        
-        predictions = self._load_predictions()
-        predictions.append(prediction_record)
-        self._save_predictions(predictions)
-        
-        return prediction_id
+        async with self.async_session_maker() as session:
+            try:
+                # Ensure user exists in database
+                from sqlalchemy import select
+                result = await session.execute(
+                    select(User).where(User.id == user_id)
+                )
+                user = result.scalar_one_or_none()
+                
+                if not user:
+                    # Create user if doesn't exist
+                    user = User(
+                        id=user_id,
+                        preferences={},
+                        metadata={}
+                    )
+                    session.add(user)
+                    await session.flush()
+                
+                # Parse timestamp
+                try:
+                    if 'Z' in timestamp:
+                        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                    elif '+' in timestamp or timestamp.count('-') > 2:
+                        dt = datetime.fromisoformat(timestamp)
+                    else:
+                        dt = datetime.fromisoformat(timestamp)
+                except:
+                    dt = datetime.utcnow()
+                
+                # Create prediction record
+                prediction = Prediction(
+                    id=prediction_id,
+                    user_id=user_id,
+                    timestamp=dt,
+                    source=source,
+                    input_features=input_features,
+                    prediction_result=prediction_result
+                )
+                
+                session.add(prediction)
+                await session.flush()  # Flush to ensure prediction is in DB
+                
+                # Add to hash chain
+                current_hash, previous_hash = await self.hash_chain_service.add_to_chain(
+                    session=session,
+                    prediction_id=prediction_id,
+                    user_id=user_id,
+                    input_features=input_features,
+                    prediction_result=prediction_result,
+                    timestamp=timestamp
+                )
+                
+                await session.commit()
+                return prediction_id
+                
+            except Exception as e:
+                await session.rollback()
+                raise Exception(f"Error saving prediction: {str(e)}")
     
-    def get_predictions(self, user_id: Optional[str] = None, limit: Optional[int] = None) -> List[Dict]:
+    async def get_predictions(
+        self,
+        user_id: Optional[str] = None,
+        limit: Optional[int] = None
+    ) -> List[Dict]:
         """
         Get predictions, optionally filtered by user_id.
+        Optimized: Default limit for performance.
         
         Args:
             user_id: Optional user ID to filter by
-            limit: Optional limit on number of results
+            limit: Optional limit on number of results (default: 100 for performance)
             
         Returns:
             List of prediction records
         """
-        predictions = self._load_predictions()
-        
-        if user_id:
-            predictions = [p for p in predictions if p.get("user_id") == user_id]
-        
-        # Sort by timestamp (newest first)
-        predictions.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
-        
-        if limit:
-            predictions = predictions[:limit]
-        
-        return predictions
+        async with self.async_session_maker() as session:
+            try:
+                # Default limit for performance (dashboard only needs recent predictions)
+                effective_limit = limit if limit is not None else 100
+                
+                query = select(Prediction)
+                
+                if user_id:
+                    query = query.where(Prediction.user_id == user_id)
+                
+                # Order by timestamp DESC (most recent first) before limiting
+                query = query.order_by(Prediction.timestamp.desc()).limit(effective_limit)
+                
+                result = await session.execute(query)
+                predictions = result.scalars().all()
+                
+                return [pred.to_dict() for pred in predictions]
+                
+            except Exception as e:
+                raise Exception(f"Error retrieving predictions: {str(e)}")
     
-    def get_recent_predictions(self, user_id: Optional[str] = None, limit: int = 10) -> List[Dict]:
+    async def get_recent_predictions(
+        self,
+        user_id: Optional[str] = None,
+        limit: int = 10
+    ) -> List[Dict]:
         """
         Get recent predictions.
         
@@ -123,11 +167,41 @@ class PredictionStorageService:
         Returns:
             List of recent prediction records
         """
-        return self.get_predictions(user_id=user_id, limit=limit)
+        return await self.get_predictions(user_id=user_id, limit=limit)
     
-    def get_dashboard_stats(self, user_id: Optional[str] = None) -> Dict:
+    async def get_unique_users(self, limit: Optional[int] = None) -> List[str]:
+        """
+        Get list of unique user IDs who have predictions.
+        Optimized: Uses DISTINCT query instead of loading all predictions.
+        
+        Args:
+            limit: Optional limit on number of users
+            
+        Returns:
+            List of unique user IDs
+        """
+        async with self.async_session_maker() as session:
+            try:
+                from sqlalchemy import func, distinct
+                
+                query = select(distinct(Prediction.user_id))
+                query = query.order_by(Prediction.user_id)
+                
+                if limit:
+                    query = query.limit(limit)
+                
+                result = await session.execute(query)
+                user_ids = [row[0] for row in result.fetchall() if row[0]]
+                
+                return user_ids
+            except Exception as e:
+                raise Exception(f"Error retrieving unique users: {str(e)}")
+    
+    async def get_dashboard_stats(self, user_id: Optional[str] = None) -> Dict:
         """
         Get aggregated statistics for dashboard.
+        OPTIMIZED: Uses PostgreSQL JSONB aggregation functions (database-level, not Python loops).
+        This is MUCH faster than loading and processing in Python.
         
         Args:
             user_id: Optional user ID to filter by
@@ -135,61 +209,205 @@ class PredictionStorageService:
         Returns:
             Dictionary with aggregated statistics
         """
-        predictions = self.get_predictions(user_id=user_id)
-        
-        if not predictions:
-            return {
-                "total_predictions": 0,
-                "disease_distribution": {},
-                "risk_levels": {
-                    "high": 0,
-                    "medium": 0,
-                    "low": 0
-                },
-                "abnormal_features_summary": {}
-            }
-        
-        # Disease distribution
-        disease_counts = {}
-        for pred in predictions:
-            disease = pred.get("prediction_result", {}).get("predicted_disease", "Unknown")
-            disease_counts[disease] = disease_counts.get(disease, 0) + 1
-        
-        # Risk levels (based on highest probability)
-        risk_levels = {"high": 0, "medium": 0, "low": 0}
-        abnormal_features_count = {}
-        
-        for pred in predictions:
-            result = pred.get("prediction_result", {})
-            probabilities = result.get("probabilities", {})
-            
-            if probabilities:
-                max_prob = max(probabilities.values())
-                if max_prob >= 0.7:
-                    risk_levels["high"] += 1
-                elif max_prob >= 0.5:
-                    risk_levels["medium"] += 1
+        async with self.async_session_maker() as session:
+            try:
+                from sqlalchemy import func, text
+                from sqlalchemy.dialects.postgresql import JSONB
+                
+                # Get total count (fast)
+                count_query = select(func.count(Prediction.id))
+                if user_id:
+                    count_query = count_query.where(Prediction.user_id == user_id)
+                
+                count_result = await session.execute(count_query)
+                total_predictions = count_result.scalar() or 0
+                
+                if total_predictions == 0:
+                    return {
+                        "total_predictions": 0,
+                        "disease_distribution": {},
+                        "risk_levels": {
+                            "high": 0,
+                            "medium": 0,
+                            "low": 0
+                        },
+                        "abnormal_features_summary": {}
+                    }
+                
+                # SUPABASE OPTIMIZATION: Use PostgreSQL JSONB aggregation functions
+                # This computes stats in the database, not in Python (10-100x faster)
+                # Limit to 300 most recent for stats (reduced from 500)
+                if user_id:
+                    stats_query = text("""
+                        WITH recent_predictions AS (
+                            SELECT prediction_result
+                            FROM predictions
+                            WHERE user_id = :user_id
+                            ORDER BY timestamp DESC
+                            LIMIT 300
+                        ),
+                        disease_counts AS (
+                            SELECT 
+                                COALESCE(prediction_result->>'predicted_disease', 'Unknown') as disease,
+                                COUNT(*)::int as count
+                            FROM recent_predictions
+                            WHERE prediction_result->>'predicted_disease' IS NOT NULL
+                            GROUP BY COALESCE(prediction_result->>'predicted_disease', 'Unknown')
+                        )
+                        SELECT
+                            -- Disease distribution (from subquery to avoid nested aggregates)
+                            (SELECT COALESCE(jsonb_object_agg(disease, count), '{}'::jsonb) FROM disease_counts) as disease_dist,
+                            
+                            -- Risk levels (using JSONB path queries)
+                            COUNT(*) FILTER (
+                                WHERE (prediction_result->'probabilities')::text IS NOT NULL
+                                AND (
+                                    SELECT MAX(value::numeric)
+                                    FROM jsonb_each(prediction_result->'probabilities')
+                                ) >= 0.7
+                            ) as high_risk,
+                            COUNT(*) FILTER (
+                                WHERE (prediction_result->'probabilities')::text IS NOT NULL
+                                AND (
+                                    SELECT MAX(value::numeric)
+                                    FROM jsonb_each(prediction_result->'probabilities')
+                                ) >= 0.5
+                                AND (
+                                    SELECT MAX(value::numeric)
+                                    FROM jsonb_each(prediction_result->'probabilities')
+                                ) < 0.7
+                            ) as medium_risk,
+                            COUNT(*) FILTER (
+                                WHERE (prediction_result->'probabilities')::text IS NOT NULL
+                                AND (
+                                    SELECT MAX(value::numeric)
+                                    FROM jsonb_each(prediction_result->'probabilities')
+                                ) < 0.5
+                            ) as low_risk
+                        FROM recent_predictions
+                    """)
+                    result = await session.execute(stats_query, {"user_id": user_id})
                 else:
-                    risk_levels["low"] += 1
-            
-            # Count abnormal features
-            input_features = pred.get("input_features", {})
-            explainability = result.get("explainability_json", {})
-            
-            # Get normal ranges (simplified - would need actual ranges from medical fields)
-            # For now, count features with high absolute importance as potentially abnormal
-            for feature_name, importance in explainability.items():
-                if abs(importance) > 0.1:  # Significant contribution
-                    abnormal_features_count[feature_name] = abnormal_features_count.get(feature_name, 0) + 1
+                    stats_query = text("""
+                        WITH recent_predictions AS (
+                            SELECT prediction_result
+                            FROM predictions
+                            ORDER BY timestamp DESC
+                            LIMIT 300
+                        ),
+                        disease_counts AS (
+                            SELECT 
+                                COALESCE(prediction_result->>'predicted_disease', 'Unknown') as disease,
+                                COUNT(*)::int as count
+                            FROM recent_predictions
+                            WHERE prediction_result->>'predicted_disease' IS NOT NULL
+                            GROUP BY COALESCE(prediction_result->>'predicted_disease', 'Unknown')
+                        )
+                        SELECT
+                            -- Disease distribution (from subquery to avoid nested aggregates)
+                            (SELECT COALESCE(jsonb_object_agg(disease, count), '{}'::jsonb) FROM disease_counts) as disease_dist,
+                            
+                            -- Risk levels (using JSONB path queries)
+                            COUNT(*) FILTER (
+                                WHERE (prediction_result->'probabilities')::text IS NOT NULL
+                                AND (
+                                    SELECT MAX(value::numeric)
+                                    FROM jsonb_each(prediction_result->'probabilities')
+                                ) >= 0.7
+                            ) as high_risk,
+                            COUNT(*) FILTER (
+                                WHERE (prediction_result->'probabilities')::text IS NOT NULL
+                                AND (
+                                    SELECT MAX(value::numeric)
+                                    FROM jsonb_each(prediction_result->'probabilities')
+                                ) >= 0.5
+                                AND (
+                                    SELECT MAX(value::numeric)
+                                    FROM jsonb_each(prediction_result->'probabilities')
+                                ) < 0.7
+                            ) as medium_risk,
+                            COUNT(*) FILTER (
+                                WHERE (prediction_result->'probabilities')::text IS NOT NULL
+                                AND (
+                                    SELECT MAX(value::numeric)
+                                    FROM jsonb_each(prediction_result->'probabilities')
+                                ) < 0.5
+                            ) as low_risk
+                        FROM recent_predictions
+                    """)
+                    result = await session.execute(stats_query)
+                
+                row = result.fetchone()
+                
+                # Parse disease distribution
+                disease_dist = row[0] if row[0] else {}
+                
+                # Risk levels
+                risk_levels = {
+                    "high": row[1] or 0,
+                    "medium": row[2] or 0,
+                    "low": row[3] or 0
+                }
+                
+                # For abnormal features, we still need to process (but only from limited set)
+                # This is acceptable since it's a smaller dataset now
+                abnormal_query = select(Prediction.prediction_result)
+                if user_id:
+                    abnormal_query = abnormal_query.where(Prediction.user_id == user_id)
+                abnormal_query = abnormal_query.order_by(Prediction.timestamp.desc()).limit(200)
+                
+                abnormal_result = await session.execute(abnormal_query)
+                abnormal_features_count = {}
+                
+                for result_data in abnormal_result.scalars().all():
+                    if not result_data:
+                        continue
+                    explainability = result_data.get("explainability_json", {})
+                    if explainability:
+                        for feature_name, importance in explainability.items():
+                            if abs(importance) > 0.1:
+                                abnormal_features_count[feature_name] = abnormal_features_count.get(feature_name, 0) + 1
+                
+                return {
+                    "total_predictions": total_predictions,
+                    "disease_distribution": disease_dist,
+                    "risk_levels": risk_levels,
+                    "abnormal_features_summary": abnormal_features_count
+                }
+                
+            except Exception as e:
+                raise Exception(f"Error retrieving dashboard stats: {str(e)}")
+    
+    async def verify_hash_chain(self) -> Dict:
+        """
+        Verify the integrity of the hash chain.
         
-        return {
-            "total_predictions": len(predictions),
-            "disease_distribution": disease_counts,
-            "risk_levels": risk_levels,
-            "abnormal_features_summary": abnormal_features_count
-        }
+        Returns:
+            Dictionary with verification results
+        """
+        async with self.async_session_maker() as session:
+            return await self.hash_chain_service.verify_chain(session)
+    
+    async def get_prediction_by_id(self, prediction_id: str) -> Optional[Dict]:
+        """
+        Get a single prediction by ID.
+        
+        Args:
+            prediction_id: Prediction UUID
+            
+        Returns:
+            Prediction record or None
+        """
+        async with self.async_session_maker() as session:
+            try:
+                result = await session.execute(
+                    select(Prediction).where(Prediction.id == prediction_id)
+                )
+                prediction = result.scalar_one_or_none()
+                return prediction.to_dict() if prediction else None
+            except Exception as e:
+                raise Exception(f"Error retrieving prediction: {str(e)}")
 
 
 # Global instance (will be initialized in main.py)
 prediction_storage: Optional[PredictionStorageService] = None
-

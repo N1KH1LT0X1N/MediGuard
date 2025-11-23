@@ -60,9 +60,9 @@ class PredictionService:
             encoder_path: Path to encoder file (default: PROJECT_ROOT/label_encoder.pkl)
         """
         if model_path is None:
-            model_path = PROJECT_ROOT / "disease_prediction_model.pkl"
+            model_path = PROJECT_ROOT / "models" / "disease_prediction_model.pkl"
         if encoder_path is None:
-            encoder_path = PROJECT_ROOT / "label_encoder.pkl"
+            encoder_path = PROJECT_ROOT / "models" / "label_encoder.pkl"
         
         self.model_path = model_path
         self.encoder_path = encoder_path
@@ -112,6 +112,28 @@ class PredictionService:
                                 self.label_encoder = pickle.load(f)
                         except Exception as pickle_error:
                             raise Exception(f"Failed to load model: {joblib_error}")
+            
+            # Handle bundle format (if model was saved as a dictionary/bundle)
+            if isinstance(self.model, dict):
+                if 'model' in self.model:
+                    # Extract model from bundle
+                    bundle = self.model
+                    self.model = bundle['model']
+                    
+                    # Handle label encoder from bundle if available
+                    if 'label_mapping' in bundle:
+                        # Create label encoder from mapping
+                        from sklearn.preprocessing import LabelEncoder
+                        le = LabelEncoder()
+                        reverse_mapping = bundle['label_mapping']
+                        classes = [reverse_mapping[i] for i in sorted(reverse_mapping.keys())]
+                        le.classes_ = np.array(classes)
+                        self.label_encoder = le
+                        print("✓ Loaded model and encoder from bundle format")
+                    else:
+                        print("✓ Loaded model from bundle format")
+                else:
+                    raise ValueError("Loaded bundle does not contain 'model' key")
             
             # Validate model
             if not hasattr(self.model, 'predict'):

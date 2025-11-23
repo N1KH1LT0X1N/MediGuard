@@ -109,8 +109,37 @@ class MediGuardExplainer:
             raise ImportError("Plotly is required. Install with: pip install plotly")
         
         # Load model and encoder
-        self.model = joblib.load(model_path)
-        self.label_encoder = joblib.load(encoder_path)
+        # Load model - handle both direct model and bundle format
+        loaded_model = joblib.load(model_path)
+        if isinstance(loaded_model, dict):
+            # Bundle format - extract model from bundle
+            if 'model' in loaded_model:
+                self.model = loaded_model['model']
+            else:
+                raise ValueError(f"Loaded bundle does not contain 'model' key. Keys: {loaded_model.keys()}")
+        else:
+            # Direct model object
+            self.model = loaded_model
+        
+        # Load label encoder - handle both direct encoder and bundle format
+        loaded_encoder = joblib.load(encoder_path)
+        if isinstance(loaded_encoder, dict):
+            # Bundle format - extract encoder from bundle if available
+            if 'label_encoder' in loaded_encoder:
+                self.label_encoder = loaded_encoder['label_encoder']
+            elif 'label_mapping' in loaded_encoder:
+                # Create label encoder from mapping
+                from sklearn.preprocessing import LabelEncoder
+                le = LabelEncoder()
+                reverse_mapping = loaded_encoder['label_mapping']
+                classes = [reverse_mapping[i] for i in sorted(reverse_mapping.keys())]
+                le.classes_ = np.array(classes)
+                self.label_encoder = le
+            else:
+                raise ValueError(f"Loaded bundle does not contain encoder. Keys: {loaded_encoder.keys()}")
+        else:
+            # Direct encoder object
+            self.label_encoder = loaded_encoder
         
         # Store scaling bridge
         self.scaling_bridge = scaling_bridge

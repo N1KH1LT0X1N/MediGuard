@@ -10,6 +10,7 @@ import DoctorPatients from './pages/doctor/DoctorPatients';
 import DoctorAppointments from './pages/doctor/DoctorAppointments';
 import DoctorSettings from './pages/doctor/DoctorSettings';
 import ScalingLayerVisualization from './pages/doctor/ScalingLayerVisualization';
+import HashChain from './pages/HashChain';
 
 // Patient Pages
 import PatientDashboard from './pages/patient/PatientDashboard';
@@ -32,7 +33,7 @@ const App = () => {
         <Route index element={<Navigate to="/home/doctor/dashboard" replace />} />
         <Route path="dashboard" element={<DoctorDashboard />} />
         <Route path="patients" element={<DoctorPatients />} />
-        <Route path="appointments" element={<DoctorAppointments />} />
+        <Route path="hash-chain" element={<HashChain />} />
         <Route path="settings" element={<DoctorSettings />} />
         <Route path="scaling-layer" element={<ScalingLayerVisualization />} />
       </Route>
@@ -42,7 +43,7 @@ const App = () => {
         <Route index element={<Navigate to="/home/patient/predict" replace />} />
         <Route path="dashboard" element={<PatientDashboard />} />
         <Route path="predict" element={<PredictDisease />} />
-        <Route path="appointments" element={<PatientAppointments />} />
+        <Route path="hash-chain" element={<HashChain />} />
         <Route path="reports" element={<PatientReports />} />
         <Route path="doctors" element={<FindDoctors />} />
         <Route path="settings" element={<PatientSettings />} />

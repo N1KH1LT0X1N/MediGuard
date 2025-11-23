@@ -1,6 +1,6 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 
-const RiskTrendChart = ({ predictions }) => {
+const RiskTrendChart = ({ predictions, showPatientNames = false }) => {
   // Process predictions to show disease probability trends
   const processData = () => {
     if (!predictions || predictions.length === 0) return [];
@@ -17,7 +17,10 @@ const RiskTrendChart = ({ predictions }) => {
           month: 'short', 
           day: 'numeric' 
         }),
-        timestamp: pred.timestamp
+        timestamp: pred.timestamp,
+        patientName: showPatientNames && pred.user_id 
+          ? (pred.user_id.length > 20 ? `${pred.user_id.substring(0, 20)}...` : pred.user_id)
+          : null
       };
 
       // Extract probabilities from prediction_result
@@ -99,6 +102,15 @@ const RiskTrendChart = ({ predictions }) => {
               borderRadius: '8px',
             }}
             formatter={(value) => [`${value}%`, 'Probability']}
+            labelFormatter={(label, payload) => {
+              if (payload && payload[0] && payload[0].payload) {
+                const patientName = payload[0].payload.patientName;
+                if (patientName) {
+                  return `${label} - Patient: ${patientName}`;
+                }
+              }
+              return label;
+            }}
           />
           <Legend />
           {diseases.map((disease, index) => (

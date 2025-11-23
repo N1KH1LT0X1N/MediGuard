@@ -221,8 +221,8 @@ Output: Disease Prediction + Risk Indicators
 #### 6. **Documentation** (100% Complete)
 
 - **Files**:
-  - `MODEL_TRAINING_LOGIC.md` (comprehensive training documentation)
-  - `SCALING_LOGIC_EXPLAINED.md` (detailed scaling documentation)
+- `docs/MODEL_TRAINING_LOGIC.md` (comprehensive training documentation)
+- `docs/SCALING_LOGIC_EXPLAINED.md` (detailed scaling documentation)
   - `ml/scaling_layer/README.md` (scaling bridge documentation)
   - `README.md` (project overview)
 
@@ -727,10 +727,13 @@ ggw_redact/
 ├── cleaned.csv                    # Training data (63 samples)
 ├── cleaned_test.csv               # Test data (488 samples)
 │
-├── MODEL_TRAINING_LOGIC.md        # Comprehensive training docs
-├── SCALING_LOGIC_EXPLAINED.md     # Detailed scaling docs
-├── README.md                       # Project overview
-├── PROJECT_CONTEXT.md             # This file
+├── docs/                          # Documentation folder
+│   ├── MODEL_TRAINING_LOGIC.md        # Comprehensive training docs
+│   ├── SCALING_LOGIC_EXPLAINED.md     # Detailed scaling docs
+│   ├── PROJECT_CONTEXT.md             # This file
+│   ├── QUICKSTART.md                   # Quick start guide
+│   ├── DATABASE_SETUP.md               # Database setup
+│   └── STORAGE_ARCHITECTURE.md         # Storage architecture
 │
 ├── ml/
 │   └── scaling_layer/
@@ -808,9 +811,9 @@ ggw_redact/
 
 **Documentation**
 
-- `MODEL_TRAINING_LOGIC.md`: 936 lines of training documentation
-- `SCALING_LOGIC_EXPLAINED.md`: 540 lines of scaling documentation
-- `PROJECT_CONTEXT.md`: This comprehensive context document
+- `docs/MODEL_TRAINING_LOGIC.md`: 936 lines of training documentation
+- `docs/SCALING_LOGIC_EXPLAINED.md`: 540 lines of scaling documentation
+- `docs/PROJECT_CONTEXT.md`: This comprehensive context document
 
 **Scaling Layer**
 
@@ -1175,9 +1178,9 @@ const API_BASE_URL = 'http://localhost:8000/api';
 
 export const predictDisease = async (features) => {
   const response = await fetch(`${API_BASE_URL}/predict`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ features })
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ features })
   });
   return response.json();
 };

@@ -33,14 +33,14 @@ const DoctorNavBar = () => {
                 Patients
               </Link>
               <Link
-                to="/home/doctor/appointments"
+                to="/home/doctor/hash-chain"
                 className={`px-4 py-2 text-base font-bold whitespace-nowrap transition-colors duration-200 ${
-                  isActive('/home/doctor/appointments')
+                  isActive('/home/doctor/hash-chain')
                     ? 'text-black bg-[#6ee000] rounded'
                     : 'text-black hover:bg-[#6ee000] rounded'
                 }`}
               >
-                Appointments
+                Hash Chain
               </Link>
               <Link
                 to="/home/doctor/settings"
