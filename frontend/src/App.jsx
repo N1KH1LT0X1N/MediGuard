@@ -9,8 +9,10 @@ import DoctorDashboard from './pages/doctor/DoctorDashboard';
 import DoctorPatients from './pages/doctor/DoctorPatients';
 import DoctorAppointments from './pages/doctor/DoctorAppointments';
 import DoctorSettings from './pages/doctor/DoctorSettings';
+import ScalingLayerVisualization from './pages/doctor/ScalingLayerVisualization';
 
 // Patient Pages
+import PatientDashboard from './pages/patient/PatientDashboard';
 import PatientAppointments from './pages/patient/PatientAppointments';
 import PatientReports from './pages/patient/PatientReports';
 import FindDoctors from './pages/patient/FindDoctors';
@@ -32,11 +34,13 @@ const App = () => {
         <Route path="patients" element={<DoctorPatients />} />
         <Route path="appointments" element={<DoctorAppointments />} />
         <Route path="settings" element={<DoctorSettings />} />
+        <Route path="scaling-layer" element={<ScalingLayerVisualization />} />
       </Route>
 
       {/* Patient Routes */}
       <Route path="/home/patient" element={<PatientHomePage />}>
         <Route index element={<Navigate to="/home/patient/predict" replace />} />
+        <Route path="dashboard" element={<PatientDashboard />} />
         <Route path="predict" element={<PredictDisease />} />
         <Route path="appointments" element={<PatientAppointments />} />
         <Route path="reports" element={<PatientReports />} />
